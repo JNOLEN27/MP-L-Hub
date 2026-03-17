@@ -13,19 +13,34 @@ class WrappedButton(QPushButton):
         self._label.setAlignment(Qt.AlignCenter)
         self._label.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        self._defaultcolor = None
+        self._hovercolor = None
 
     def setText(self, text):
         self._label.setText(text)
 
+    def _parsecolor(self, block):
+        match = re.search(r'(?<!-)color\s*:\s*([^;]+)', block)
+        return match.group(1).strip() if match else None
+
+    def _applylabelcolor(self, color):
+        self._label.setStyleSheet(f"color: {color}; background-color: transparent;" if color else "background-color: transparent;")
+
     def setStyleSheet(self, style):
         super().setStyleSheet(style)
-        block = re.search(r'QPushButton\s*\{([^}]*)\}', style)
-        color = None
-        if block:
-            match = re.search(r'(?<!-)color\s*:\s*([^;]+)', block.group(1))
-            if match:
-                color = match.group(1).strip()
-        self._label.setStyleSheet(f"color: {color}; background-color: transparent;" if color else "background-color: transparent;")
+        default_block = re.search(r'QPushButton\s*\{([^}]*)\}', style)
+        self._defaultcolor = self._parsecolor(default_block.group(1)) if default_block else None
+        hover_block = re.search(r'QPushButton:hover\s*\{([^}]*)\}', style)
+        self._hovercolor = self._parsecolor(hover_block.group(1)) if hover_block else None
+        self._applylabelcolor(self._defaultcolor)
+
+    def enterEvent(self, event):
+        self._applylabelcolor(self._hovercolor or self._defaultcolor)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._applylabelcolor(self._defaultcolor)
+        super().leaveEvent(event)
 
     def resizeEvent(self, event):
         self._label.setGeometry(self.rect())
