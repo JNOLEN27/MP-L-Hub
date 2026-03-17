@@ -17,27 +17,34 @@ class LoginDialog(QDialog):
     
     def setupui(self):
         layout = QVBoxLayout()
-        layout.setSpacing(0)
+
+        header = QWidget()
+        header.setStyleSheet("background-color: #156082;")
+        headerlayout = QVBoxLayout(header)
+        headerlayout.setContentsMargins(0, 4, 0, 4)
+
         title = QLabel("VCCH MP&L Hub")
         title.setFont(QFont("Arial", 16, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("background-color: #156082; color: white;")
-        layout.addWidget(title)
+        title.setStyleSheet("color: white; background-color: transparent;")
+        headerlayout.addWidget(title)
+
+        layout.addWidget(header)
         if self.auth.userexists():
-            self.setuploginform(layout)
+            self.setuploginform(layout, headerlayout)
         else:
             self.setupregistrationform(layout)
         self.setLayout(layout)
         
-    def setuploginform(self, layout):
+    def setuploginform(self, layout, headerlayout=None):
         userdata = self.auth.getuserdata()
         existingusername = userdata.get('username', '')
-        
+
         label = QLabel(f"Welcome back, {existingusername}!")
         label.setFont(QFont("Arial", 12))
         label.setAlignment(Qt.AlignCenter)
-        label.setStyleSheet("background-color: #156082; color: white;")
-        layout.addWidget(label)
+        label.setStyleSheet("color: white; background-color: transparent;")
+        headerlayout.addWidget(label)
 
         layout.addSpacing(20)
         
