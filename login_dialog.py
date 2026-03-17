@@ -17,6 +17,7 @@ class LoginDialog(QDialog):
     
     def setupui(self):
         layout = QVBoxLayout()
+        layout.setSpacing(0)
         title = QLabel("VCCH MP&L Hub")
         title.setFont(QFont("Arial", 16, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
