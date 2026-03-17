@@ -1,6 +1,23 @@
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout
+from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
+
+
+class WrappedButton(QPushButton):
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
+        self._label = QLabel(text, self)
+        self._label.setWordWrap(True)
+        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+
+    def setText(self, text):
+        self._label.setText(text)
+
+    def resizeEvent(self, event):
+        self._label.setGeometry(self.rect())
+        super().resizeEvent(event)
 
 from app.auth.permissions import PermissionsManager
 from app.launcher.access_request_dialog import AccessRequestDialog
@@ -74,7 +91,7 @@ class LauncherWindow(QMainWindow):
             appname = appinfo['name']
             hasaccess = appname in userapps
             
-            btn = QPushButton(f"{appinfo['name']}")
+            btn = WrappedButton(appinfo['name'])
             btn.setMinimumHeight(100)
             btn.setFont(QFont("Arial", 11))
             
