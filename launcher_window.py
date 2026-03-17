@@ -1,3 +1,5 @@
+import re
+
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
@@ -14,6 +16,16 @@ class WrappedButton(QPushButton):
 
     def setText(self, text):
         self._label.setText(text)
+
+    def setStyleSheet(self, style):
+        super().setStyleSheet(style)
+        block = re.search(r'QPushButton\s*\{([^}]*)\}', style)
+        color = None
+        if block:
+            match = re.search(r'(?<!-)color\s*:\s*([^;]+)', block.group(1))
+            if match:
+                color = match.group(1).strip()
+        self._label.setStyleSheet(f"color: {color}; background-color: transparent;" if color else "background-color: transparent;")
 
     def resizeEvent(self, event):
         self._label.setGeometry(self.rect())
