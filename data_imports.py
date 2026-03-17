@@ -4,16 +4,20 @@ from PyQt5.QtGui import QFont
 from pathlib import Path
 
 from app.data.import_manager import DataImportManager
-from app.utils.config import COLORPRIMARY, COLORSUCCESS
+from app.utils.config import COLORPRIMARY, COLORSUCCESS, ADMINUSERS, POWERUSERS
 
 class DataImportsWindow(QMainWindow):
     def __init__(self, userdata, parent=None):
         super().__init__(parent)
-        self.userdata = userdata
+        self.userdata = userdata if isinstance(userdata, dict) else {'username': userdata}
         self.importmanager = DataImportManager()
-        
-        self.setWindowTitle("Data Imports - Admin Panel")
-        self.resize(1000,700)
+
+        username = self.userdata['username']
+        self._isadmin = username in ADMINUSERS
+        self._allowedcategories = None if self._isadmin else set(POWERUSERS.get(username, []))
+
+        self.setWindowTitle("Data Imports - Admin Panel" if self._isadmin else "Data Imports")
+        self.resize(1000, 700)
         self.setupui()
         
     def setupui(self):
@@ -103,32 +107,40 @@ class DataImportsWindow(QMainWindow):
         return widget
     
     def createimportbutton(self, buttoninfo):
+        allowed = self._allowedcategories is None or buttoninfo["category"] in self._allowedcategories
+
         widget = QWidget()
         widget.setMinimumHeight(120)
-        widget.setStyleSheet(f"""QWidget {{background-color: {COLORPRIMARY}; border: 2px solid #ddd; border-radius: 8px; padding: 10px;}} QWidget:hover {{border-color: #f8f9fa; background-color: white;}}""")
-        
+        if allowed:
+            widget.setStyleSheet(f"""QWidget {{background-color: {COLORPRIMARY}; border: 2px solid #ddd; border-radius: 8px; padding: 10px;}} QWidget:hover {{border-color: #f8f9fa; background-color: white;}}""")
+        else:
+            widget.setStyleSheet("""QWidget {background-color: #e0e0e0; border: 2px solid #ccc; border-radius: 8px; padding: 10px;}""")
+
         layout = QVBoxLayout()
-        
+
         titlelayout = QHBoxLayout()
-        
         titlelabel = QLabel(buttoninfo["title"])
         titlelabel.setFont(QFont("Arial", 12, QFont.Bold))
+        if not allowed:
+            titlelabel.setStyleSheet("color: #999;")
         titlelayout.addWidget(titlelabel)
         titlelayout.addStretch()
-        
         layout.addLayout(titlelayout)
-        
+
         descriptionlabel = QLabel(buttoninfo["description"])
         descriptionlabel.setStyleSheet("color: #666; font-size: 10px;")
         descriptionlabel.setWordWrap(True)
         layout.addWidget(descriptionlabel)
-        
-        importbtn = QPushButton("Import File")
-        importbtn.setStyleSheet(f"""QPushButton {{background-color: {COLORPRIMARY}; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold;}} QPushButton:hover {{background-color: #45a049;}}""")
-        importbtn.clicked.connect(lambda checked, info=buttoninfo: self.handleimport(info))
-        
+
+        importbtn = QPushButton("Import File" if allowed else "No Access")
+        importbtn.setEnabled(allowed)
+        if allowed:
+            importbtn.setStyleSheet(f"""QPushButton {{background-color: {COLORPRIMARY}; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold;}} QPushButton:hover {{background-color: #45a049;}}""")
+            importbtn.clicked.connect(lambda checked, info=buttoninfo: self.handleimport(info))
+        else:
+            importbtn.setStyleSheet("""QPushButton {background-color: #bbb; color: #888; border: none; padding: 8px; border-radius: 4px; font-weight: bold;}""")
         layout.addWidget(importbtn)
-        
+
         widget.setLayout(layout)
         return widget
     
@@ -153,10 +165,7 @@ class DataImportsWindow(QMainWindow):
                 reply = QMessageBox.question(self, "Import with Warnings?", f"File has warnings but can be imported:\n\n" + "\n".join(errors) + f"\n\nPreview shows {len(previewdata)} rows.\n\nProceed with import?", QMessageBox.Yes | QMessageBox.No)
                 if reply != QMessageBox.Yes:
                     return
-            if isinstance(self.userdata, dict):
-                username = self.userdata['username']
-            else:
-                username = self.userdata
+            username = self.userdata['username']
             success, message = self.importmanager.importfile(filepath, category, username, f"Imported {title} via Data Imports app")
             if success:
                 QMessageBox.information(self, "Import Successful", message)

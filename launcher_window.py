@@ -48,7 +48,7 @@ class WrappedButton(QPushButton):
 
 from app.auth.permissions import PermissionsManager
 from app.launcher.access_request_dialog import AccessRequestDialog
-from app.utils.config import WINDOWTITLE, LAUNCHERWINDOWSIZE, AVAILABLEAPPS, COLORPRIMARY, COLORSUCCESS, ADMINUSERS
+from app.utils.config import WINDOWTITLE, LAUNCHERWINDOWSIZE, AVAILABLEAPPS, COLORPRIMARY, COLORSUCCESS, ADMINUSERS, POWERUSERS
 
 class LauncherWindow(QMainWindow):
     openapprequested = pyqtSignal(str)
@@ -145,12 +145,14 @@ class LauncherWindow(QMainWindow):
         requestbtn.clicked.connect(self.requestaccess)
         layout.addWidget(requestbtn)
         
-        if self.userdata['username'] in ADMINUSERS:
+        username = self.userdata['username']
+        if username in ADMINUSERS:
             adminbtn = QPushButton("Admin Panel")
             adminbtn.clicked.connect(self.openadminpanel)
             adminbtn.setStyleSheet(f"""QPushButton {{background-color: {COLORPRIMARY}; color: white; padding: 8px 15px;}}""")
             layout.addWidget(adminbtn)
-            
+
+        if username in ADMINUSERS or username in POWERUSERS:
             dataimportbtn = QPushButton("Data Imports")
             dataimportbtn.clicked.connect(self.opendataimportpanel)
             dataimportbtn.setStyleSheet(f"""QPushButton {{background-color: {COLORPRIMARY}; color: white; padding: 8px 15px;}}""")
@@ -191,7 +193,7 @@ class LauncherWindow(QMainWindow):
     def opendataimportpanel(self):
         from app.admin.data_imports import DataImportsWindow
         
-        dataimport = DataImportsWindow(self.userdata['username'], self)
+        dataimport = DataImportsWindow(self.userdata, self)
         dataimport.show()
         
     def closeevent(self, event):
