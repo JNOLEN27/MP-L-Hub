@@ -20,8 +20,8 @@ class LoginDialog(QDialog):
         title = QLabel("VCCH MP&L Hub")
         title.setFont(QFont("Arial", 16, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("background-color: #156082; color: white;")
         layout.addWidget(title)
-        layout.addSpacing(20)
         if self.auth.userexists():
             self.setuploginform(layout)
         else:
@@ -35,9 +35,10 @@ class LoginDialog(QDialog):
         label = QLabel(f"Welcome back, {existingusername}!")
         label.setFont(QFont("Arial", 12))
         label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet("background-color: #156082; color: white;")
         layout.addWidget(label)
-        
-        layout.addSpacing(10)
+
+        layout.addSpacing(20)
         
         usernamelayout = QHBoxLayout()
         usernamelayout.addWidget(QLabel("Username:"))
