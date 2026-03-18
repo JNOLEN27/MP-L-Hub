@@ -169,24 +169,28 @@ class InventorybyPurposeNeuralNetwork:
 
             x = masterdata[allfeatures].apply(pd.to_numeric, errors='coerce').fillna(0).values.astype(np.float32)
             y = pd.to_numeric(masterdata[sdcol], errors='coerce').fillna(0).values.astype(np.float32)  # fix 8
+            partids = masterdata[partcol].values if partcol in masterdata.columns else np.arange(len(x))
 
-            return True, f"Features prepared: {x.shape[0]} samples, {x.shape[1]} features.", x, y  # fix 5: shape not shope
+            return True, f"Features prepared: {x.shape[0]} samples, {x.shape[1]} features.", x, y, partids
 
         except Exception as e:
-            return False, f"Error preparing features: {str(e)}", None, None
+            return False, f"Error preparing features: {str(e)}", None, None, None
 
     def buildmodel(self, inputsize: int, hiddensizes: List[int] = [128, 64, 32], dropout: float = 0.3) -> SafetyStockModel:
         self.model = SafetyStockModel(inputsize, hiddensizes, dropout)
         return self.model
 
     def train(self, data: Dict[str, pd.DataFrame], epochs: int = 100, batchsize: int = 32, learningrate: float = 1e-3, testsize: float = 0.2, hiddensizes: List[int] = [128, 64, 32], dropout: float = 0.3) -> Tuple[bool, str, Dict]:
-        success, message, x, y = self.preparefeatures(data)
+        success, message, x, y, partids = self.preparefeatures(data)
 
         if not success:
             return False, message, {}
 
         xscaled = self.scaler.fit_transform(x)
-        xtrain, xtest, ytrain, ytest = train_test_split(xscaled, y, test_size=testsize, random_state=42)  # fix 6: test_size
+        indices = np.arange(len(x))
+        xtrain, xtest, ytrain, ytest, idx_train, idx_test = train_test_split(
+            xscaled, y, indices, test_size=testsize, random_state=42
+        )
 
         xtraint = torch.tensor(xtrain, dtype=torch.float32)
         ytraint = torch.tensor(ytrain, dtype=torch.float32)
@@ -214,16 +218,23 @@ class InventorybyPurposeNeuralNetwork:
 
         self.model.eval()
         with torch.no_grad():
-            preds = self.model(xtestt).numpy()
+            xallt  = torch.tensor(xscaled, dtype=torch.float32)
+            allpreds = self.model(xallt).numpy()
+            preds    = allpreds[idx_test]
 
         mae  = float(np.mean(np.abs(preds - ytest)))
         rmse = float(np.sqrt(np.mean((preds - ytest) ** 2)))
 
+        split_labels = np.full(len(x), 'train', dtype=object)
+        split_labels[idx_test] = 'test'
+
         self.lastpredictions = pd.DataFrame({
-            'Predicted':  np.round(preds, 2),
-            'Actual':     ytest,
-            'Error':      np.round(preds - ytest, 2),
-            'AbsError':   np.round(np.abs(preds - ytest), 2),
+            partcol:      partids,
+            'Predicted':  np.round(allpreds, 2),
+            'Actual':     y,
+            'Error':      np.round(allpreds - y, 2),
+            'AbsError':   np.round(np.abs(allpreds - y), 2),
+            'Split':      split_labels,
         })
 
         metrics = {
