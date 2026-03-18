@@ -274,7 +274,9 @@ class InventorybyPurposeNeuralNetwork:
 
         for col, le in self.labelencoders.items():
             if col in df.columns:
-                df[col] = le.transform(df[col].astype(str))
+                known = set(le.classes_)
+                df[col] = df[col].astype(str).apply(lambda v: v if v in known else le.classes_[0])
+                df[col] = le.transform(df[col])
 
         x = df[self.featurecolumns].apply(pd.to_numeric, errors='coerce').fillna(0).values.astype(np.float32)
         xscaled = self.scaler.transform(x)
