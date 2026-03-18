@@ -53,6 +53,12 @@ class DataImportManager:
                 "description": "Delivery Days per Supplier",
                 "requiredcolumns": ["FRAKTDAG", "LEVNR"],
                 "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
+                "archive": False},
+            "pva_percentage": {
+                "name": "PVA Percentage",
+                "description": "Plant Volume Adjustment percentage distribution (SPA2 YTD)",
+                "requiredcolumns": ["PVA.Percentage", "Frequency"],
+                "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
                 "archive": False}
             }
         self.ensuredirectories()
