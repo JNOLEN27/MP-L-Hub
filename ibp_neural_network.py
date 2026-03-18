@@ -8,46 +8,42 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from typing import Dict, List, Tuple, Optional
 
-# ---------------------------------------------------------------------------
-# Column name constants — adjust here if upstream data changes column names
-# ---------------------------------------------------------------------------
-PART_COL        = "PART"            # Part number in master data
-COUNTRY_COL     = "SUPP_SHP_COUNTRY"  # Country column in master data
-SAFETY_COL      = "SAFETY"          # Target: safety stock value
+partcol      = "PART"
+countrycol   = "SUPP_SHP_COUNTRY"
+sscol        = "STOCK"
+sdcol        = "SAFETY"   # target: safety stock
 
-REQ_PART_COL    = "ARTNR"           # Part number in req split files
-REQ_DATE_COL    = "PRODDAG"         # Production date in req split files
-REQ_QTY_COL     = "ARTAN"          # Daily quantity in req split files
+reqpartcol = "ARTNR"
+reqdatecol = "PRODDAG"
+reqqtycol  = "ARTAN"
 
-# Numeric features fed into the model
-NUMERIC_FEATURES = [
+numericfeatures = [
     "PRICE",
     "UNIT_LOAD_QTY",
+    "MULT_UNIT_LOAD_VALID",
     "SHIP_QTY",
     "STOCK",
+    # "SAFETY" removed — it is the target, including it here causes data leakage
     "FIXED_PERIOD",
     "TTT_DAYS",
-    "avg_daily_usage",  # computed column added before training
+    "avgdailyusage",
 ]
 
-# Categorical features that will be label-encoded
-CATEGORICAL_FEATURES = [
-    "Region",           # derived from SUPP_SHP_COUNTRY
+categoricalfeatures = [
+    "Region",
     "SCC_NAME",
     "CONSOLIDATOR",
-    "MULT_UNIT_LOAD_VALID",
+    "SUPP_SHP_COUNTRY",
+    "SUPP_SHP",
 ]
 
 
-# ---------------------------------------------------------------------------
-# PyTorch model definition
-# ---------------------------------------------------------------------------
 class SafetyStockModel(nn.Module):
-    def __init__(self, input_size: int, hidden_sizes: List[int], dropout: float):
+    def __init__(self, inputsize: int, hiddensizes: List[int], dropout: float):
         super().__init__()
         layers: List[nn.Module] = []
-        prev = input_size
-        for h in hidden_sizes:
+        prev = inputsize
+        for h in hiddensizes:
             layers += [nn.Linear(prev, h), nn.ReLU(), nn.Dropout(dropout)]
             prev = h
         layers.append(nn.Linear(prev, 1))
@@ -57,45 +53,35 @@ class SafetyStockModel(nn.Module):
         return self.network(x).squeeze(-1)
 
 
-# ---------------------------------------------------------------------------
-# Main class
-# ---------------------------------------------------------------------------
 class InventorybyPurposeNeuralNetwork:
     def __init__(self, import_manager):
         self.import_manager = import_manager
         self.scaler = StandardScaler()
-        self.label_encoders: Dict[str, LabelEncoder] = {}
+        self.labelencoders: Dict[str, LabelEncoder] = {}  # fix 1: : not =
         self.model: Optional[SafetyStockModel] = None
-        self.feature_columns: List[str] = []
+        self.featurecolumns: List[str] = []
 
-    # ------------------------------------------------------------------
-    # Data loading
-    # ------------------------------------------------------------------
     def loadrequireddata(self) -> Tuple[bool, str, Dict[str, pd.DataFrame]]:
         try:
             data = {
-                'master_data':  self.import_manager.loaddata("master_data"),
-                'req_split_1':  self.import_manager.loaddata("part_requirement_split_1"),
-                'req_split_2':  self.import_manager.loaddata("part_requirement_split_2"),
-                'req_split_3':  self.import_manager.loaddata("part_requirement_split_3"),
+                'master_data': self.import_manager.loaddata("master_data"),
+                'req_split_1': self.import_manager.loaddata("part_requirement_split_1"),
+                'req_split_2': self.import_manager.loaddata("part_requirement_split_2"),
+                'req_split_3': self.import_manager.loaddata("part_requirement_split_3"),
             }
 
             if data['master_data'].empty:
-                return False, "Master Data is required but could not be loaded.", {}
+                return False, "Master Data is required but could not be loaded.", data
 
-            missing_splits = [k for k in ('req_split_1', 'req_split_2', 'req_split_3')
-                              if data[k].empty]
-            if missing_splits:
-                return False, f"Could not load: {missing_splits}", {}
+            missingsplits = [k for k in ('req_split_1', 'req_split_2', 'req_split_3') if data[k].empty]
+            if missingsplits:
+                return False, f"Could not load: {missingsplits}", {}
 
-            return True, "Data loaded successfully.", data
+            return True, "Data loaded successfully", data
 
         except Exception as e:
             return False, f"Error loading data: {str(e)}", {}
 
-    # ------------------------------------------------------------------
-    # Region mapping
-    # ------------------------------------------------------------------
     def determineregion(self, country) -> str:
         if pd.isna(country) or not country:
             return "No Country Found"
@@ -113,63 +99,32 @@ class InventorybyPurposeNeuralNetwork:
             'SLOVENIA', 'SPAIN', 'SWEDEN', 'SWITZERLAND', 'TUNISIA', 'TURKEY',
             'UKRAINE', 'UNITED KINGDOM',
         ):
-            return 'EMEA'
+            return "EMEA"
         if country in ('CHINA', 'SOUTH KOREA', 'THAILAND', 'VIETNAM'):
-            return 'APAC'
+            return "APAC"
 
         return 'Country not mapped. Reach out to Admin'
 
-    # ------------------------------------------------------------------
-    # Daily usage calculation
-    # ------------------------------------------------------------------
-    def calculatedailyusage(
-        self,
-        masterdata: pd.DataFrame,
-        reqsplits: List[pd.DataFrame],
-    ) -> pd.Series:
-        """
-        Compute the average daily usage per part using a region-specific
-        forward-looking date window:
-
-          USA / MEX  → weeks 1–4   (today + 0  … today + 27 days)
-          EMEA       → weeks 5–9   (today + 28 … today + 62 days)
-          APAC       → weeks 10–14 (today + 63 … today + 97 days)
-
-        The req splits are in long format: each row is one
-        (ARTNR, PRODDAG, SKIFT) with a quantity in ARTAN.
-        Daily usage = sum of all shifts per day, averaged over the window.
-        """
+    def calculatedailyusage(self, masterdata: pd.DataFrame, reqsplits: List[pd.DataFrame]) -> pd.Series:
         today = pd.Timestamp.today().normalize()
-
-        region_windows = {
+        regionwindows = {
             'USA':  (today,                          today + pd.Timedelta(days=27)),
             'MEX':  (today,                          today + pd.Timedelta(days=27)),
             'EMEA': (today + pd.Timedelta(days=28),  today + pd.Timedelta(days=62)),
             'APAC': (today + pd.Timedelta(days=63),  today + pd.Timedelta(days=97)),
         }
 
-        # Combine all req splits and parse production dates
-        combined = pd.concat(reqsplits, ignore_index=True)
-        combined[REQ_DATE_COL] = pd.to_datetime(combined[REQ_DATE_COL], errors='coerce')
-        combined[REQ_QTY_COL]  = pd.to_numeric(combined[REQ_QTY_COL],  errors='coerce').fillna(0)
+        combined = pd.concat(reqsplits, ignore_index=True)  # fix 3: ignore_index
+        combined[reqdatecol] = pd.to_datetime(combined[reqdatecol], errors='coerce')
+        combined[reqqtycol]  = pd.to_numeric(combined[reqqtycol],  errors='coerce').fillna(0)
 
-        # Sum across shifts → one row per (part, date)
-        daily = (
-            combined
-            .groupby([REQ_PART_COL, REQ_DATE_COL], as_index=False)[REQ_QTY_COL]
-            .sum()
-        )
-
-        # Build a part → region lookup from master data
-        region_lookup = dict(
-            zip(masterdata[PART_COL],
-                masterdata[COUNTRY_COL].apply(self.determineregion))
-        )
+        daily = combined.groupby([reqpartcol, reqdatecol], as_index=False)[reqqtycol].sum()
+        regionlookup = dict(zip(masterdata[partcol], masterdata[countrycol].apply(self.determineregion)))
 
         results = []
-        for part in masterdata[PART_COL]:
-            region = region_lookup.get(part, 'No Country Found')
-            window = region_windows.get(region)
+        for part in masterdata[partcol]:
+            region = regionlookup.get(part, 'No Country Found')
+            window = regionwindows.get(region)  # fix 2: regionwindows not regionlookup
 
             if window is None:
                 results.append(0.0)
@@ -177,191 +132,141 @@ class InventorybyPurposeNeuralNetwork:
 
             start, end = window
             partrows = daily[
-                (daily[REQ_PART_COL] == part) &
-                (daily[REQ_DATE_COL] >= start) &
-                (daily[REQ_DATE_COL] <= end)
+                (daily[reqpartcol] == part) &
+                (daily[reqdatecol] >= start) &
+                (daily[reqdatecol] <= end)
             ]
 
-            results.append(float(partrows[REQ_QTY_COL].mean()) if not partrows.empty else 0.0)
+            results.append(float(partrows[reqqtycol].mean()) if not partrows.empty else 0.0)
 
-        return pd.Series(results, index=masterdata.index, name='avg_daily_usage')
+        return pd.Series(results, index=masterdata.index, name='avgdailyusage')
 
-    # ------------------------------------------------------------------
-    # Feature preparation
-    # ------------------------------------------------------------------
-    def preparefeatures(
-        self,
-        data: Dict[str, pd.DataFrame],
-    ) -> Tuple[bool, str, Optional[np.ndarray], Optional[np.ndarray]]:
+    def preparefeatures(self, data: Dict[str, pd.DataFrame]) -> Tuple[bool, str, Optional[np.ndarray], Optional[np.ndarray]]:
         try:
             masterdata = data['master_data'].copy()
             reqsplits  = [data['req_split_1'], data['req_split_2'], data['req_split_3']]
+            masterdata['Region']       = masterdata[countrycol].apply(self.determineregion)
+            masterdata['avgdailyusage'] = self.calculatedailyusage(masterdata, reqsplits)
+            masterdata = masterdata.dropna(subset=[sdcol])  # fix 8: target is sdcol (SAFETY)
 
-            # Derived columns
-            masterdata['Region']          = masterdata[COUNTRY_COL].apply(self.determineregion)
-            masterdata['avg_daily_usage'] = self.calculatedailyusage(masterdata, reqsplits)
-
-            # Drop rows where the target is missing
-            masterdata = masterdata.dropna(subset=[SAFETY_COL])
             if masterdata.empty:
-                return False, f"No rows with a valid '{SAFETY_COL}' value.", None, None
+                return False, f"No rows with a valid {sdcol} value.", None, None
 
-            # Encode categorical features
-            for col in CATEGORICAL_FEATURES:
+            for col in categoricalfeatures:
                 if col in masterdata.columns:
                     le = LabelEncoder()
                     masterdata[col] = le.fit_transform(masterdata[col].astype(str))
-                    self.label_encoders[col] = le
+                    self.labelencoders[col] = le  # fix 4: le not len
 
-            all_features = NUMERIC_FEATURES + CATEGORICAL_FEATURES
-            missing = [f for f in all_features if f not in masterdata.columns]
+            allfeatures = numericfeatures + categoricalfeatures
+            missing = [f for f in allfeatures if f not in masterdata.columns]
+
             if missing:
                 return False, f"Missing feature columns: {missing}", None, None
 
-            self.feature_columns = all_features
+            self.featurecolumns = allfeatures
 
-            X = masterdata[all_features].apply(pd.to_numeric, errors='coerce').fillna(0).values.astype(np.float32)
-            y = pd.to_numeric(masterdata[SAFETY_COL], errors='coerce').fillna(0).values.astype(np.float32)
+            x = masterdata[allfeatures].apply(pd.to_numeric, errors='coerce').fillna(0).values.astype(np.float32)
+            y = pd.to_numeric(masterdata[sdcol], errors='coerce').fillna(0).values.astype(np.float32)  # fix 8
 
-            return True, f"Features prepared: {X.shape[0]} samples, {X.shape[1]} features.", X, y
+            return True, f"Features prepared: {x.shape[0]} samples, {x.shape[1]} features.", x, y  # fix 5: shape not shope
 
         except Exception as e:
             return False, f"Error preparing features: {str(e)}", None, None
 
-    # ------------------------------------------------------------------
-    # Model construction
-    # ------------------------------------------------------------------
-    def buildmodel(
-        self,
-        input_size: int,
-        hidden_sizes: List[int] = [128, 64, 32],
-        dropout: float = 0.3,
-    ) -> SafetyStockModel:
-        self.model = SafetyStockModel(input_size, hidden_sizes, dropout)
+    def buildmodel(self, inputsize: int, hiddensizes: List[int] = [128, 64, 32], dropout: float = 0.3) -> SafetyStockModel:
+        self.model = SafetyStockModel(inputsize, hiddensizes, dropout)
         return self.model
 
-    # ------------------------------------------------------------------
-    # Training
-    # ------------------------------------------------------------------
-    def train(
-        self,
-        data: Dict[str, pd.DataFrame],
-        epochs: int = 100,
-        batch_size: int = 32,
-        learning_rate: float = 1e-3,
-        test_size: float = 0.2,
-        hidden_sizes: List[int] = [128, 64, 32],
-        dropout: float = 0.3,
-    ) -> Tuple[bool, str, Dict]:
-        """
-        Full pipeline: prepare features → scale → split → train → evaluate.
-        Returns (success, message, metrics_dict).
-        """
-        success, message, X, y = self.preparefeatures(data)
+    def train(self, data: Dict[str, pd.DataFrame], epochs: int = 100, batchsize: int = 32, learningrate: float = 1e-3, testsize: float = 0.2, hiddensizes: List[int] = [128, 64, 32], dropout: float = 0.3) -> Tuple[bool, str, Dict]:
+        success, message, x, y = self.preparefeatures(data)
+
         if not success:
             return False, message, {}
 
-        X_scaled = self.scaler.fit_transform(X)
+        xscaled = self.scaler.fit_transform(x)
+        xtrain, xtest, ytrain, ytest = train_test_split(xscaled, y, test_size=testsize, random_state=42)  # fix 6: test_size
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_scaled, y, test_size=test_size, random_state=42,
-        )
+        xtraint = torch.tensor(xtrain, dtype=torch.float32)
+        ytraint = torch.tensor(ytrain, dtype=torch.float32)
+        xtestt  = torch.tensor(xtest,  dtype=torch.float32)
+        ytestt  = torch.tensor(ytest,  dtype=torch.float32)
 
-        X_train_t = torch.tensor(X_train, dtype=torch.float32)
-        y_train_t = torch.tensor(y_train, dtype=torch.float32)
-        X_test_t  = torch.tensor(X_test,  dtype=torch.float32)
-        y_test_t  = torch.tensor(y_test,  dtype=torch.float32)
-
-        loader   = DataLoader(TensorDataset(X_train_t, y_train_t), batch_size=batch_size, shuffle=True)
+        loader    = DataLoader(TensorDataset(xtraint, ytraint), batch_size=batchsize, shuffle=True)  # fix 7: batch_size
         criterion = nn.MSELoss()
 
-        self.buildmodel(X_train.shape[1], hidden_sizes, dropout)
-        optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.buildmodel(xtrain.shape[1], hiddensizes, dropout)
+        optimizer = optim.Adam(self.model.parameters(), lr=learningrate)
 
-        train_losses: List[float] = []
+        trainlosses: List[float] = []
         self.model.train()
+
         for _ in range(epochs):
-            epoch_loss = 0.0
-            for X_batch, y_batch in loader:
+            epochloss = 0.0
+            for xbatch, ybatch in loader:
                 optimizer.zero_grad()
-                loss = criterion(self.model(X_batch), y_batch)
+                loss = criterion(self.model(xbatch), ybatch)
                 loss.backward()
                 optimizer.step()
-                epoch_loss += loss.item() * len(X_batch)
-            train_losses.append(epoch_loss / len(X_train_t))
+                epochloss += loss.item() * len(xbatch)
+            trainlosses.append(epochloss / len(xtraint))
 
         self.model.eval()
         with torch.no_grad():
-            preds = self.model(X_test_t).numpy()
+            preds = self.model(xtestt).numpy()
 
-        mae  = float(np.mean(np.abs(preds - y_test)))
-        rmse = float(np.sqrt(np.mean((preds - y_test) ** 2)))
+        mae  = float(np.mean(np.abs(preds - ytest)))
+        rmse = float(np.sqrt(np.mean((preds - ytest) ** 2)))
 
         metrics = {
-            'train_losses': train_losses,
-            'test_mse':     float(np.mean((preds - y_test) ** 2)),
-            'test_mae':     mae,
-            'test_rmse':    rmse,
-            'n_train':      len(X_train),
-            'n_test':       len(X_test),
+            'trainlosses': trainlosses,
+            'testmse':     float(np.mean((preds - ytest) ** 2)),
+            'testmae':     mae,
+            'testrmse':    rmse,
+            'ntrain':      len(xtrain),
+            'ntest':       len(xtest),
         }
 
-        return True, f"Training complete — Test RMSE: {rmse:.4f}  MAE: {mae:.4f}", metrics
+        return True, f"Training complete - Test RMSE: {rmse:.4f} MAE: {mae:.4f}", metrics
 
-    # ------------------------------------------------------------------
-    # Inference
-    # ------------------------------------------------------------------
-    def predict(
-        self,
-        masterdata: pd.DataFrame,
-        reqsplits: List[pd.DataFrame],
-    ) -> Optional[np.ndarray]:
-        """Predict safety stock for new / unseen master data."""
-        if self.model is None or not self.feature_columns:
+    def predict(self, masterdata: pd.DataFrame, reqsplits: List[pd.DataFrame]) -> Optional[np.ndarray]:
+        if self.model is None or not self.featurecolumns:
             return None
 
         df = masterdata.copy()
-        df['Region']          = df[COUNTRY_COL].apply(self.determineregion)
-        df['avg_daily_usage'] = self.calculatedailyusage(df, reqsplits)
+        df['Region']        = df[countrycol].apply(self.determineregion)
+        df['avgdailyusage'] = self.calculatedailyusage(df, reqsplits)
 
-        for col, le in self.label_encoders.items():
+        for col, le in self.labelencoders.items():
             if col in df.columns:
                 df[col] = le.transform(df[col].astype(str))
 
-        X = df[self.feature_columns].apply(pd.to_numeric, errors='coerce').fillna(0).values.astype(np.float32)
-        X_scaled = self.scaler.transform(X)
+        x = df[self.featurecolumns].apply(pd.to_numeric, errors='coerce').fillna(0).values.astype(np.float32)
+        xscaled = self.scaler.transform(x)
 
         self.model.eval()
         with torch.no_grad():
-            return self.model(torch.tensor(X_scaled, dtype=torch.float32)).numpy()
+            return self.model(torch.tensor(xscaled, dtype=torch.float32)).numpy()
 
-    # ------------------------------------------------------------------
-    # Persistence
-    # ------------------------------------------------------------------
     def savemodel(self, filepath: str) -> bool:
         if self.model is None:
             return False
         torch.save({
-            'model_state':    self.model.state_dict(),
+            'modelstate':     self.model.state_dict(),
             'scaler':         self.scaler,
-            'label_encoders': self.label_encoders,
-            'feature_columns': self.feature_columns,
+            'labelencoders':  self.labelencoders,
+            'featurecolumns': self.featurecolumns,
         }, filepath)
         return True
 
-    def loadmodel(
-        self,
-        filepath: str,
-        hidden_sizes: List[int] = [128, 64, 32],
-        dropout: float = 0.3,
-    ) -> bool:
+    def loadmodel(self, filepath: str, hiddensizes: List[int] = [128, 64, 32], dropout: float = 0.3) -> bool:
         try:
             checkpoint = torch.load(filepath)
-            self.feature_columns  = checkpoint['feature_columns']
-            self.scaler           = checkpoint['scaler']
-            self.label_encoders   = checkpoint['label_encoders']
-            self.buildmodel(len(self.feature_columns), hidden_sizes, dropout)
-            self.model.load_state_dict(checkpoint['model_state'])
+            self.featurecolumns  = checkpoint['featurecolumns']
+            self.scaler          = checkpoint['scaler']
+            self.labelencoders   = checkpoint['labelencoders']
+            self.buildmodel(len(self.featurecolumns), hiddensizes, dropout)
+            self.model.load_state_dict(checkpoint['modelstate'])
             return True
         except Exception:
             return False
