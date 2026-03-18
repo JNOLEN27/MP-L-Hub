@@ -261,7 +261,7 @@ class InventorybyPurposeNeuralNetwork:
 
     def loadmodel(self, filepath: str, hiddensizes: List[int] = [128, 64, 32], dropout: float = 0.3) -> bool:
         try:
-            checkpoint = torch.load(filepath)
+            checkpoint = torch.load(filepath, weights_only=False)
             self.featurecolumns  = checkpoint['featurecolumns']
             self.scaler          = checkpoint['scaler']
             self.labelencoders   = checkpoint['labelencoders']
