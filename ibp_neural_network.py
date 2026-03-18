@@ -237,6 +237,22 @@ class InventorybyPurposeNeuralNetwork:
             'Split':      split_labels,
         })
 
+        unseen = data['master_data'][data['master_data'][sdcol].isna()].copy()
+        if not unseen.empty:
+            reqsplits   = [data['req_split_1'], data['req_split_2'], data['req_split_3']]
+            unseenpreds = self.predict(unseen, reqsplits)
+            if unseenpreds is not None:
+                unseenids = unseen[partcol].values if partcol in unseen.columns else np.arange(len(unseen))
+                unseendf  = pd.DataFrame({
+                    partcol:     unseenids,
+                    'Predicted': np.round(unseenpreds, 2),
+                    'Actual':    np.nan,
+                    'Error':     np.nan,
+                    'AbsError':  np.nan,
+                    'Split':     'inference',
+                })
+                self.lastpredictions = pd.concat([self.lastpredictions, unseendf], ignore_index=True)
+
         metrics = {
             'trainlosses': trainlosses,
             'testmse':     float(np.mean((preds - ytest) ** 2)),
