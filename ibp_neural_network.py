@@ -60,6 +60,7 @@ class InventorybyPurposeNeuralNetwork:
         self.labelencoders: Dict[str, LabelEncoder] = {}  # fix 1: : not =
         self.model: Optional[SafetyStockModel] = None
         self.featurecolumns: List[str] = []
+        self.lastpredictions: Optional[pd.DataFrame] = None
 
     def loadrequireddata(self) -> Tuple[bool, str, Dict[str, pd.DataFrame]]:
         try:
@@ -218,6 +219,13 @@ class InventorybyPurposeNeuralNetwork:
         mae  = float(np.mean(np.abs(preds - ytest)))
         rmse = float(np.sqrt(np.mean((preds - ytest) ** 2)))
 
+        self.lastpredictions = pd.DataFrame({
+            'Predicted':  np.round(preds, 2),
+            'Actual':     ytest,
+            'Error':      np.round(preds - ytest, 2),
+            'AbsError':   np.round(np.abs(preds - ytest), 2),
+        })
+
         metrics = {
             'trainlosses': trainlosses,
             'testmse':     float(np.mean((preds - ytest) ** 2)),
@@ -247,6 +255,18 @@ class InventorybyPurposeNeuralNetwork:
         self.model.eval()
         with torch.no_grad():
             return self.model(torch.tensor(xscaled, dtype=torch.float32)).numpy()
+
+    def exportpredictions(self, filepath: str) -> Tuple[bool, str]:
+        if self.lastpredictions is None:
+            return False, "No predictions available. Run train() first."
+        try:
+            if filepath.endswith('.xlsx'):
+                self.lastpredictions.to_excel(filepath, index_label='Part Index')
+            else:
+                self.lastpredictions.to_csv(filepath, index_label='Part Index')
+            return True, f"Predictions exported to {filepath}"
+        except Exception as e:
+            return False, f"Export failed: {str(e)}"
 
     def savemodel(self, filepath: str) -> bool:
         if self.model is None:
