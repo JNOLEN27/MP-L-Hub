@@ -334,61 +334,66 @@ class CoverageAnalysisEngine:
     def adddailyprojections(self, coveragedf: pd.DataFrame, datadict: Dict[str, pd.DataFrame], daysforward: int) -> pd.DataFrame:
         consumptiondata = self.combineconsumptiondata(
             datadict['req_split_1'],
-            datadict['req_split_2'], 
+            datadict['req_split_2'],
             datadict['req_split_3']
         )
-        
+        receiptdata = self.parsesplunkreceivingdata(datadict.get('splunk_data', pd.DataFrame()))
+
         coveragedf['Initial_Stock'] = pd.to_numeric(coveragedf['Initial_Stock'], errors='coerce').fillna(0)
-        
+
         today = datetime.now().date()
-        
-        for dayoffset in range(daysforward):
-            date = today + timedelta(days=dayoffset)
-            datestr = date.strftime('%Y_%m_%d')
-            colname = f'Day_{dayoffset:03d}_{datestr}'
-            
-            if dayoffset == 0:
-                coveragedf[colname] = coveragedf['Initial_Stock']
-            else:
-                # Initialize with zeros first
-                coveragedf[colname] = 0.0
-        
+
+        # Day 0: initial stock + today's deliveries - today's consumption
+        day0_receipts = receiptdata.get(today, pd.Series(dtype=float))
+        day0_consumption = consumptiondata.get(today, pd.Series(dtype=float))
+
+        def calc_day0(row):
+            try:
+                part_no = row['PART_NO']
+                part_no_upper = str(part_no).upper().strip()
+                receipts = float(day0_receipts.get(part_no_upper, 0)) if not day0_receipts.empty else 0
+                consumption = float(day0_consumption.get(part_no, 0)) if not day0_consumption.empty else 0
+                return float(row['Initial_Stock']) + receipts - consumption
+            except:
+                return float(row['Initial_Stock'])
+
+        day0_col = f'Day_000_{today.strftime("%Y_%m_%d")}'
+        coveragedf[day0_col] = coveragedf.apply(calc_day0, axis=1)
+
+        # Days 1+: previous day's ending value + deliveries - consumption
         for dayoffset in range(1, daysforward):
             date = today + timedelta(days=dayoffset)
             datestr = date.strftime('%Y_%m_%d')
             colname = f'Day_{dayoffset:03d}_{datestr}'
-            
+
             prevdate = date - timedelta(days=1)
             prevdatestr = prevdate.strftime('%Y_%m_%d')
             prevcol = f'Day_{dayoffset-1:03d}_{prevdatestr}'
-            
-            dailyconsumption = consumptiondata.get(date, pd.Series(dtype=float))
-            
-            def safe_calculate(row):
+
+            daily_receipts = receiptdata.get(date, pd.Series(dtype=float))
+            daily_consumption = consumptiondata.get(date, pd.Series(dtype=float))
+
+            def safe_calculate(row, prevcol=prevcol, daily_receipts=daily_receipts, daily_consumption=daily_consumption):
                 try:
                     if prevcol not in row.index:
                         return 0
-                    
                     prev_value = float(row[prevcol]) if pd.notna(row[prevcol]) else 0
-                    
                     part_no = row['PART_NO']
-                    consumption = float(dailyconsumption.get(part_no, 0)) if part_no in dailyconsumption else 0
-                    
-                    remaining = prev_value - consumption
-                    return remaining
-                    
+                    part_no_upper = str(part_no).upper().strip()
+                    receipts = float(daily_receipts.get(part_no_upper, 0)) if not daily_receipts.empty else 0
+                    consumption = float(daily_consumption.get(part_no, 0)) if not daily_consumption.empty else 0
+                    return prev_value + receipts - consumption
                 except:
                     return 0
-            
+
             try:
                 coveragedf[colname] = coveragedf.apply(safe_calculate, axis=1)
-                
             except:
                 coveragedf[colname] = 0
-        
+
         if 'Initial_Stock' in coveragedf.columns:
             coveragedf = coveragedf.drop('Initial_Stock', axis=1)
-        
+
         return coveragedf
     
     def analyzeindivpart(self, partnumber: str, datadict: Dict[str, pd.DataFrame]) -> Tuple[Dict, List[Dict]]:
