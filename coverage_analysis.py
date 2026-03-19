@@ -607,7 +607,7 @@ class CoverageAnalysisEngine:
                 return d
 
             df = splunkdf[[part_col, date_col]].copy()
-            df['_part'] = df[part_col].astype(str).str.upper().str.strip()
+            df['_part'] = df[part_col].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).str.upper()
             df['_date'] = pd.to_datetime(df[date_col], errors='coerce').dt.date.apply(shift_date)
 
             if qty_col:
