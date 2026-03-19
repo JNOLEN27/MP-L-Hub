@@ -374,7 +374,7 @@ class CoverageAnalysisEngine:
                     part_no = row['PART_NO']
                     consumption = float(dailyconsumption.get(part_no, 0)) if part_no in dailyconsumption else 0
                     
-                    remaining = max(0, prev_value - consumption)
+                    remaining = prev_value - consumption
                     return remaining
                     
                 except:
@@ -476,7 +476,7 @@ class CoverageAnalysisEngine:
             if date in consumptiondata:
                 consumptionqty = int(consumptiondata[date])
                 if consumptionqty > 0:
-                    currentqty = max(0, currentqty - consumptionqty)
+                    currentqty = currentqty - consumptionqty
                     transactions.append({
                         'Date': datestr,
                         'Transaction Type': 'Req',
