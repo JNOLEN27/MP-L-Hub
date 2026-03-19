@@ -361,6 +361,8 @@ class CoverageAnalysisEngine:
         coveragedf[day0_col] = coveragedf.apply(calc_day0, axis=1)
 
         # Days 1+: previous day's ending value + deliveries - consumption
+        lastcol = day0_col  # always points to the last actually-created column
+
         for dayoffset in range(1, daysforward):
             date = today + timedelta(days=dayoffset)
 
@@ -369,10 +371,7 @@ class CoverageAnalysisEngine:
 
             datestr = date.strftime('%Y_%m_%d')
             colname = f'Day_{dayoffset:03d}_{datestr}'
-
-            prevdate = date - timedelta(days=1)
-            prevdatestr = prevdate.strftime('%Y_%m_%d')
-            prevcol = f'Day_{dayoffset-1:03d}_{prevdatestr}'
+            prevcol = lastcol  # use last created column, not the skipped weekend column
 
             daily_receipts = receiptdata.get(date, pd.Series(dtype=float))
             daily_consumption = consumptiondata.get(date, pd.Series(dtype=float))
@@ -392,6 +391,7 @@ class CoverageAnalysisEngine:
 
             try:
                 coveragedf[colname] = coveragedf.apply(safe_calculate, axis=1)
+                lastcol = colname  # update tracker to the column we just created
             except:
                 coveragedf[colname] = 0
 
