@@ -1,12 +1,14 @@
+import numpy as np
 import pandas as pd
 import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
-
+ 
+ 
 class CoverageAnalysisEngine:
     def __init__(self, import_manager):
         self.import_manager = import_manager
-    
+ 
     def loadrequireddata(self) -> Tuple[bool, str, Dict[str, pd.DataFrame]]:
         try:
             data = {
@@ -15,129 +17,78 @@ class CoverageAnalysisEngine:
                 'req_split_1': self.import_manager.loaddata("part_requirement_split_1"),
                 'req_split_2': self.import_manager.loaddata("part_requirement_split_2"),
                 'req_split_3': self.import_manager.loaddata("part_requirement_split_3"),
-                'splunk_data': self.import_manager.loaddata("splunk_receiving_data")
+                'splunk_data': self.import_manager.loaddata("splunk_receiving_data"),
             }
-            
+ 
             if data['current_inventory'].empty or data['master_data'].empty:
                 return False, "Current Inventory Report and Master Data are required.", data
-            
+ 
             return True, "Data loaded successfully", data
-            
+ 
         except Exception as e:
             return False, f"Error loading data: {str(e)}", {}
-    
+ 
     def getpartswithconsumption(self, req1: pd.DataFrame, req2: pd.DataFrame, req3: pd.DataFrame) -> List[str]:
         allparts = set()
-        
+ 
         for df in [req1, req2, req3]:
             if not df.empty and 'ARTNR' in df.columns:
                 allparts.update(df['ARTNR'].dropna().unique())
-        
+ 
         return sorted(list(allparts))
-    
+ 
     def sortbydaystozerofriendly(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
         if coveragedf.empty:
             return coveragedf
-        
-        datecols = []
-        for col in coveragedf.columns:
-            try:
-                datetime.strptime(col, '%m/%d')
-                datecols.append(col)
-            except:
-                continue
-        
-        datecols.sort(key=lambda x: datetime.strptime(x, '%m/%d'))
-        
-        def findzeroday(row):
-            for i, col in enumerate(datecols):
-                if pd.notna(row[col]) and row[col] <= 0:
-                    return i
-            return 999
-        
-        coveragedf['Days To Zero'] = coveragedf.apply(findzeroday, axis=1)
-        coveragedf = coveragedf.sort_values(['Days To Zero', 'Part Number']).reset_index(drop=True)
-        coveragedf = coveragedf.drop('Days To Zero', axis=1)
+ 
+        sort_cols = [c for c in ['Day Alert', 'Part Number'] if c in coveragedf.columns]
+        if sort_cols:
+            coveragedf = coveragedf.sort_values(sort_cols).reset_index(drop=True)
         return coveragedf
-    
+ 
     def loadcoveragecomments(self) -> Dict[str, str]:
         commentsfile = self.import_manager.importsdir.parent / "coveragecomments.json"
-        
-        print(f"DEBUG: Loading comments from: {commentsfile}")
-        print(f"DEBUG: File exists: {commentsfile.exists()}")
-        
         if commentsfile.exists():
             try:
                 with open(commentsfile, 'r') as f:
-                    comments = json.load(f)
-                    print(f"DEBUG: Loaded {len(comments)} comments: {list(comments.keys())[:5]}")
-                    return comments
+                    return json.load(f)
             except Exception as e:
                 print(f"Error loading comments: {e}")
-        
-        print("DEBUG: Returning empty comments dict")
         return {}
-    
+ 
     def savecoveragecomments(self, comments: Dict[str, str]):
         commentsfile = self.import_manager.importsdir.parent / "coveragecomments.json"
-        
-        print(f"DEBUG: Saving {len(comments)} comments to: {commentsfile}")
-        print(f"DEBUG: Parent directory: {commentsfile.parent}")
-        print(f"DEBUG: Parent directory exists: {commentsfile.parent.exists()}")
-        
         try:
             commentsfile.parent.mkdir(parents=True, exist_ok=True)
-            
             with open(commentsfile, 'w') as f:
                 json.dump(comments, f, indent=2)
-            
-            print(f"DEBUG: File saved successfully. File now exists: {commentsfile.exists()}")
-            
-            if commentsfile.exists():
-                file_size = commentsfile.stat().st_size
-                print(f"DEBUG: File size: {file_size} bytes")
-        
         except Exception as e:
             print(f"Error saving comments: {e}")
-            import traceback
-            traceback.print_exc()
-            
+ 
     def addcoveragecomments(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
         comments = self.loadcoveragecomments()
         coveragedf['Comments'] = coveragedf['PART_NO'].astype(str).map(comments).fillna('')
         return coveragedf
-    
+ 
     def adddaysuntilzerocolumn(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
         if coveragedf.empty:
             return coveragedf
-        
-        dailycols = [col for col in coveragedf.columns if col.startswith('Day_')]
-        dailycols.sort()
-        
-        def calculatedaystozero(row):
-            for i, col in enumerate(dailycols):
-                try:
-                    value = float(row[col]) if pd.notna(row[col]) else float('inf')
-                    if value <= 0:
-                        return i
-                except (ValueError, TypeError):
-                    continue
-            return 999
-        
-        coveragedf['Day Alert'] = coveragedf.apply(calculatedaystozero, axis=1)
-        
-        def ensureintegeronly(days):
-            try:
-                daysint = int(float(days))
-                return min(daysint, 999)
-            except (ValueError, TypeError):
-                return 999
-        
-        coveragedf['Day Alert'] = coveragedf['Day Alert'].apply(ensureintegeronly)
-        coveragedf['Day Alert'] = coveragedf['Day Alert'].astype(int)
-        
+ 
+        dailycols = sorted([col for col in coveragedf.columns if col.startswith('Day_')])
+        if not dailycols:
+            coveragedf['Day Alert'] = 999
+            return coveragedf
+ 
+        arr = coveragedf[dailycols].values.astype(float)
+        arr = np.where(np.isnan(arr), np.inf, arr)
+ 
+        mask = arr <= 0
+        has_zero = mask.any(axis=1)
+        day_alert = np.where(has_zero, mask.argmax(axis=1), 999)
+        coveragedf['Day Alert'] = np.minimum(day_alert, 999).astype(int)
+ 
         return coveragedf
-        
+ 
     def renamecolumnstofriendly(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
         columnmapping = {
             'PART_NO': 'Part Number',
@@ -150,66 +101,61 @@ class CoverageAnalysisEngine:
             'SUPP_SHP_COUNTRY': 'SHP Country',
             'SCC_NAME': 'SCC Name',
             'Region': 'Region',
-            'Comments': 'Comments'}
-        
-        dailycols = [col for col in coveragedf.columns if col.startswith('Day_')]
-        for col in dailycols:
+            'Comments': 'Comments',
+            'SAFETY': 'Safety Days',
+            'STOCK': 'Safety Stock',
+        }
+ 
+        for col in [c for c in coveragedf.columns if c.startswith('Day_')]:
             try:
                 parts = col.split('_')
-                if len(parts) >= 4:
-                    datestr = parts[2] + '-' + parts[3] + '-' + parts[4]
-                    dateobj = datetime.strptime(datestr, '%Y-%m-%d')
-                    newname = dateobj.strftime('%m/%d')
-                    columnmapping[col] = newname
-            except:
-                if len(parts) > 1:
-                    daynum = parts[1]
-                    columnmapping[col] = f"Day {int(daynum)}"
-                else:
+                if len(parts) >= 5:
+                    datestr = f"{parts[2]}-{parts[3]}-{parts[4]}"
+                    columnmapping[col] = datetime.strptime(datestr, '%Y-%m-%d').strftime('%m/%d')
+            except Exception:
+                try:
+                    columnmapping[col] = f"Day {int(parts[1])}" if len(parts) > 1 else col
+                except Exception:
                     columnmapping[col] = col
-       
-        coveragedf = coveragedf.rename(columns=columnmapping)
-        return coveragedf
-    
+ 
+        return coveragedf.rename(columns=columnmapping)
+ 
     def reordercolumns(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
         if coveragedf.empty:
             return coveragedf
-        
-        preferredorder = ['Part Number', 'Part Description', 'MFG Code', 'Supplier Name', 'SHP Code', 'SHP Country', 'Region', 'Unit Load Qty', 'Price', 'SCC Name', 'Day Alert', 'Comments']
-        
-        datecolumns = []
+ 
+        preferredorder = [
+            'Part Number', 'Part Description', 'MFG Code', 'Supplier Name',
+            'SHP Code', 'SHP Country', 'Region', 'Safety Days', 'Safety Stock',
+            'Unit Load Qty', 'Price', 'SCC Name', 'Day Alert', 'Comments',
+        ]
+ 
+        dateparsed: Dict[str, datetime] = {}
         for col in coveragedf.columns:
             try:
-                datetime.strptime(col, '%m/%d')
-                datecolumns.append(col)
-            except:
-                continue
-            
-        datecolumns.sort(key=lambda x: datetime.strptime(x, '%m/%d'))
-        finalorder = []
-        
-        for col in preferredorder:
-            if col in coveragedf.columns:
-                finalorder.append(col)
-        
+                dateparsed[col] = datetime.strptime(col, '%m/%d')
+            except Exception:
+                pass
+ 
+        datecolumns = sorted(dateparsed, key=dateparsed.__getitem__)
+ 
+        finalorder = [col for col in preferredorder if col in coveragedf.columns]
         finalorder.extend(datecolumns)
-        remainingcols = [col for col in coveragedf.columns if col not in finalorder]
-        finalorder.extend(remainingcols)
-        
-        coveragedf = coveragedf[finalorder]
-        
-        return coveragedf
-    
-    def buildcoverageanalysis(self, datadict: Dict[str, pd.DataFrame], daysforward: int = 90) -> pd.DataFrame:
+        placed = set(finalorder)
+        finalorder.extend(col for col in coveragedf.columns if col not in placed)
+ 
+        return coveragedf[finalorder]
+ 
+    def buildcoverageanalysis(self, datadict: Dict[str, pd.DataFrame], daysforward: int = 40) -> pd.DataFrame:
         uniqueparts = self.getpartswithconsumption(
-            datadict['req_split_1'], 
-            datadict['req_split_2'], 
-            datadict['req_split_3']
+            datadict['req_split_1'],
+            datadict['req_split_2'],
+            datadict['req_split_3'],
         )
-        
+ 
         if not uniqueparts:
             return pd.DataFrame()
-        
+ 
         coveragedf = self.buildbasetable(uniqueparts, datadict)
         coveragedf = self.addregioncolumn(coveragedf)
         coveragedf = self.addcoveragecomments(coveragedf)
@@ -218,135 +164,137 @@ class CoverageAnalysisEngine:
         coveragedf = self.renamecolumnstofriendly(coveragedf)
         coveragedf = self.reordercolumns(coveragedf)
         coveragedf = self.sortbydaystozerofriendly(coveragedf)
-        
+ 
         return coveragedf
-    
+ 
     def buildbasetable(self, uniqueparts: List[str], datadict: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         coveragedf = pd.DataFrame({'PART_NO': uniqueparts})
         coveragedf = self.mergemasterdata(coveragedf, datadict['master_data'])
         coveragedf = self.addinitialstock(coveragedf, datadict['current_inventory'])
         coveragedf = coveragedf[coveragedf['Initial_Stock'] > 0].reset_index(drop=True)
-        
+ 
         ldjisshp = ['AEWMV', 'AEJPM', 'AEXXW', 'AEIK0', 'AE2YR', 'AEX93', 'AE9ET']
         if 'SUPP_SHP' in coveragedf.columns:
             coveragedf = coveragedf[~coveragedf['SUPP_SHP'].isin(ldjisshp)].reset_index(drop=True)
-        
+ 
         return coveragedf
-    
+ 
     def mergemasterdata(self, coveragedf: pd.DataFrame, masterdata: pd.DataFrame) -> pd.DataFrame:
         if masterdata.empty:
             return coveragedf
-        
-        mastercols = ['PART', 'PART_DESC', 'PRICE', 'UNIT_LOAD_QTY', 'SAFETY', 'STOCK', 'MUL', 'SUPP_MFG', 'SUPP_NAME', 'SUPP_SHP', 'SUPP_SHP_COUNTRY', 'SCC_NAME']
+ 
+        mastercols = [
+            'PART', 'PART_DESC', 'PRICE', 'UNIT_LOAD_QTY', 'SAFETY', 'STOCK',
+            'MUL', 'SUPP_MFG', 'SUPP_NAME', 'SUPP_SHP', 'SUPP_SHP_COUNTRY', 'SCC_NAME',
+        ]
         availablecols = [col for col in mastercols if col in masterdata.columns]
-    
-        part_col = None
-        for possible_part_col in ['PART', 'PART_NO', 'PART_NUMBER', 'ARTNR']:
-            if possible_part_col in masterdata.columns:
-                part_col = possible_part_col
-                break
-        
+ 
+        part_col = next(
+            (c for c in ['PART', 'PART_NO', 'PART_NUMBER', 'ARTNR'] if c in masterdata.columns),
+            None,
+        )
+ 
         if availablecols and part_col:
             merge_cols = [part_col] + [col for col in availablecols if col != part_col]
             mastersubset = masterdata[merge_cols].drop_duplicates(subset=[part_col])
-    
+ 
             coveragedf = coveragedf.merge(
-                mastersubset, 
-                left_on='PART_NO', 
-                right_on=part_col, 
-                how='left'
+                mastersubset,
+                left_on='PART_NO',
+                right_on=part_col,
+                how='left',
             )
-
             if part_col in coveragedf.columns and part_col != 'PART_NO':
                 coveragedf = coveragedf.drop(part_col, axis=1)
-        
+ 
         return coveragedf
-    
-    def determineregion(self, country):
+ 
+    def determineregion(self, country) -> str:
         if pd.isna(country) or not country:
             return "No Country Found"
-        
+ 
         country = str(country).upper().strip()
-        
-        if country in ['USA']:
+ 
+        if country == 'USA':
             return 'USA'
-        
-        if country in ['MEXICO', 'CANADA']:
+        if country in ('MEXICO', 'CANADA'):
             return 'MEXI'
-        
-        if country in ['AUSTRIA', 'BELGIUM', 'BULGARIA', 'CZECH REPUBLIC', 'DENMARK', 'FRANCE', 'GERMANY', 'HUNGARY', 'IRELAND', 'ITALY', 'LITHUANIA',
-                       'MOROCCO', 'NETHERLANDS', 'NORWAY', 'POLAND', 'PORTUGAL', 'ROMANIA', 'SLOVAK REPUBLIC', 'SLOVENIA', 'SPAIN', 'SWEDEN',
-                       'SWITZERLAND', 'TUNISIA', 'TURKEY', 'UKRAINE', 'UNITED KINGDOM']:
+        if country in (
+            'AUSTRIA', 'BELGIUM', 'BULGARIA', 'CZECH REPUBLIC', 'DENMARK', 'FRANCE',
+            'GERMANY', 'HUNGARY', 'IRELAND', 'ITALY', 'LITHUANIA', 'MOROCCO',
+            'NETHERLANDS', 'NORWAY', 'POLAND', 'PORTUGAL', 'ROMANIA', 'SLOVAK REPUBLIC',
+            'SLOVENIA', 'SPAIN', 'SWEDEN', 'SWITZERLAND', 'TUNISIA', 'TURKEY',
+            'UKRAINE', 'UNITED KINGDOM',
+        ):
             return 'EMEA'
-        
-        if country in ['CHINA', 'SOUTH KOREA', 'THAILAND', 'VIETNAM']:
+        if country in ('CHINA', 'SOUTH KOREA', 'THAILAND', 'VIETNAM'):
             return 'APAC'
-        
+ 
         return 'Country Not Mapped. Reach out to Admin'
-    
+ 
     def addregioncolumn(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
-        shipcountrycol = None
-        possiblecols = ['SUPP_SHP_COUNTRY']
-        
-        for col in possiblecols:
-            if col in coveragedf.columns:
-                shipcountrycol = col
-                break
-        
-        if shipcountrycol:
-            coveragedf['Region'] = coveragedf[shipcountrycol].apply(self.determineregion)
-        else:
+        if 'SUPP_SHP_COUNTRY' not in coveragedf.columns:
             coveragedf['Region'] = 'Unknown'
+            return coveragedf
+ 
+        unique_countries = coveragedf['SUPP_SHP_COUNTRY'].unique()
+        mapping = {c: self.determineregion(c) for c in unique_countries}
+        coveragedf['Region'] = coveragedf['SUPP_SHP_COUNTRY'].map(mapping)
         return coveragedf
-    
+ 
     def addinitialstock(self, coveragedf: pd.DataFrame, currentinventory: pd.DataFrame) -> pd.DataFrame:
         if currentinventory.empty:
             coveragedf['Initial_Stock'] = 0
             return coveragedf
-        
-        inventorycols = ['PART_NO', 'BEGINNING_INVENTORY_TODAY', 'INVENTORY_YARD_TODAY']
+ 
+        inventorycols = ['PART_NO', 'BEGINNING_INVENTORY_TODAY', 'INVENTORY_YARD_TODAY', 'INVENTORY_PORT_TODAY']
         availablecols = [col for col in inventorycols if col in currentinventory.columns]
-        
         inventory_value_cols = [col for col in availablecols if col != 'PART_NO']
-        
-        if len(availablecols) >= 2 and len(inventory_value_cols) > 0:
-            agg_dict = {col: 'sum' for col in inventory_value_cols}
-            
-            inventorysubset = currentinventory[availablecols].groupby('PART_NO').agg(agg_dict).reset_index()
-            
+ 
+        if len(availablecols) >= 2 and inventory_value_cols:
+            inventorysubset = currentinventory[availablecols].copy()
+ 
+            for col in inventory_value_cols:
+                inventorysubset[col] = pd.to_numeric(
+                    inventorysubset[col].astype(str).str.replace(',', '', regex=False),
+                    errors='coerce',
+                ).fillna(0)
+ 
+            aggdict = {col: 'sum' for col in inventory_value_cols}
+            inventorysubset = inventorysubset.groupby('PART_NO').agg(aggdict).reset_index()
+ 
             inventorysubset['Initial_Stock'] = (
-                inventorysubset.get('BEGINNING_INVENTORY_TODAY', 0) + 
-                inventorysubset.get('INVENTORY_YARD_TODAY', 0)
+                inventorysubset.get('BEGINNING_INVENTORY_TODAY', 0)
+                + inventorysubset.get('INVENTORY_YARD_TODAY', 0)
+                + inventorysubset.get('INVENTORY_PORT_TODAY', 0)
             )
-            
+ 
             coveragedf = coveragedf.merge(
-                inventorysubset[['PART_NO', 'Initial_Stock']], 
-                on='PART_NO', 
-                how='left'
+                inventorysubset[['PART_NO', 'Initial_Stock']],
+                on='PART_NO',
+                how='left',
             )
         else:
-            print("DEBUG: Not enough inventory columns found, setting Initial_Stock to 0")
             coveragedf['Initial_Stock'] = 0
-        
+ 
         coveragedf['Initial_Stock'] = coveragedf['Initial_Stock'].fillna(0)
         return coveragedf
-    
+ 
     def adddailyprojections(self, coveragedf: pd.DataFrame, datadict: Dict[str, pd.DataFrame], daysforward: int) -> pd.DataFrame:
         consumptiondata = self.combineconsumptiondata(
             datadict['req_split_1'],
             datadict['req_split_2'],
             datadict['req_split_3']
         )
-        receiptdata = self.parsesplunkdata(datadict.get('splunk_data', pd.DataFrame()))
-
+        receiptdata = self.parsesplunkreceivingdata(datadict.get('splunk_data', pd.DataFrame()))
+ 
         coveragedf['Initial_Stock'] = pd.to_numeric(coveragedf['Initial_Stock'], errors='coerce').fillna(0)
-
+ 
         today = datetime.now().date()
-
-        # Day 0: initial stock + today's deliveries - today's consumption
+ 
         day0_receipts = receiptdata.get(today, pd.Series(dtype=float))
         day0_consumption = consumptiondata.get(today, pd.Series(dtype=float))
-
+ 
         def calc_day0(row):
             try:
                 part_no = row['PART_NO']
@@ -356,26 +304,25 @@ class CoverageAnalysisEngine:
                 return float(row['Initial_Stock']) + receipts - consumption
             except:
                 return float(row['Initial_Stock'])
-
+ 
         day0_col = f'Day_000_{today.strftime("%Y_%m_%d")}'
         coveragedf[day0_col] = coveragedf.apply(calc_day0, axis=1)
-
-        # Days 1+: previous day's ending value + deliveries - consumption
-        lastcol = day0_col  # always points to the last actually-created column
+ 
+        last_col = day0_col
 
         for dayoffset in range(1, daysforward):
             date = today + timedelta(days=dayoffset)
-
-            if date.weekday() >= 5:
-                continue
-
-            datestr = date.strftime('%Y_%m_%d')
-            colname = f'Day_{dayoffset:03d}_{datestr}'
-            prevcol = lastcol  # use last created column, not the skipped weekend column
-
+        
             daily_receipts = receiptdata.get(date, pd.Series(dtype=float))
             daily_consumption = consumptiondata.get(date, pd.Series(dtype=float))
-
+        
+            if date.weekday() >= 5:
+                continue
+        
+            datestr = date.strftime('%Y_%m_%d')
+            colname = f'Day_{dayoffset:03d}_{datestr}'
+            prevcol = last_col
+ 
             def safe_calculate(row, prevcol=prevcol, daily_receipts=daily_receipts, daily_consumption=daily_consumption):
                 try:
                     if prevcol not in row.index:
@@ -388,88 +335,94 @@ class CoverageAnalysisEngine:
                     return prev_value + receipts - consumption
                 except:
                     return 0
-
+ 
             try:
                 coveragedf[colname] = coveragedf.apply(safe_calculate, axis=1)
-                lastcol = colname  # update tracker to the column we just created
+                last_col = colname
             except:
                 coveragedf[colname] = 0
-
+                last_col = colname
+ 
         if 'Initial_Stock' in coveragedf.columns:
             coveragedf = coveragedf.drop('Initial_Stock', axis=1)
-
+ 
         return coveragedf
-    
+ 
     def analyzeindivpart(self, partnumber: str, datadict: Dict[str, pd.DataFrame]) -> Tuple[Dict, List[Dict]]:
         partinfo = self.findpartinfo(partnumber, datadict)
         if not partinfo:
             return None, []
-        
+ 
         transactions = self.generateparttransactions(partnumber, datadict, partinfo['Initial Stock'])
         return partinfo, transactions
-    
+ 
     def findpartinfo(self, partnumber: str, datadict: Dict[str, pd.DataFrame]) -> Dict:
         masterdata = datadict['master_data']
         currentinventory = datadict['current_inventory']
-        
-        partcol = None
-        for possiblecol in ['PART', 'PART_NO', 'PART_NUMBER', 'ARTNR']:
-            if possiblecol in masterdata.columns:
-                partcol = possiblecol
-                break
-            
+ 
+        partcol = next(
+            (c for c in ['PART', 'PART_NO', 'PART_NUMBER', 'ARTNR'] if c in masterdata.columns),
+            None,
+        )
         if not partcol:
             return None
-        
+ 
         partrow = masterdata[masterdata[partcol].astype(str).str.upper() == partnumber]
         if partrow.empty:
             return None
-        
+ 
         partrow = partrow.iloc[0]
         initialstock = 0
         if not currentinventory.empty and 'PART_NO' in currentinventory.columns:
-            invrow = currentinventory[currentinventory['PART_NO'].astype(str).str.upper() == partnumber]
+            invrow = currentinventory[
+                currentinventory['PART_NO'].astype(str).str.upper() == partnumber
+            ]
             if not invrow.empty:
-                beginv = invrow['BEGINNING_INVENTORY_TODAY'].fillna(0).sum() 
-                yardinv = invrow['INVENTORY_YARD_TODAY'].fillna(0).sum()
+                beginv = pd.to_numeric(
+                    invrow['BEGINNING_INVENTORY_TODAY'].astype(str).str.replace(',', '', regex=False),
+                    errors='coerce',
+                ).fillna(0).sum()
+                yardinv = pd.to_numeric(
+                    invrow['INVENTORY_YARD_TODAY'].astype(str).str.replace(',', '', regex=False),
+                    errors='coerce',
+                ).fillna(0).sum()
                 initialstock = int(beginv + yardinv)
-                
-        partinfo = {
+ 
+        return {
             'Part Number': partnumber,
             'Part Description': partrow.get('PART_DESC', ''),
             'Supplier Name': partrow.get('SUPP_NAME', ''),
             'MFG Code': partrow.get('SUPP_MFG', ''),
             'SHP Code': partrow.get('SUPP_SHP', ''),
             'Initial Stock': int(initialstock),
-            'Unit Load Qty': partrow.get('UNIT_LOAD_QTY', 0),
-            'Multi Unit Load': partrow.get('MUL', 0),
-            'Piece Price': partrow.get('PRICE', 0),
-            'Safety Days': partrow.get('SAFETY', 0),
-            'Safety Stock': partrow.get('STOCK', 0)}
-        
-        return partinfo
-        
+            'Unit Load Qty': self.safefloat(partrow.get('UNIT_LOAD_QTY', 0)),
+            'Multi Unit Load': self.safefloat(partrow.get('MUL', 0)),
+            'Piece Price': self.safefloat(partrow.get('PRICE', 0)),
+            'Safety Days': self.safefloat(partrow.get('SAFETY', 0)),
+            'Safety Stock': self.safefloat(partrow.get('STOCK', 0)),
+        }
+ 
     def generateparttransactions(self, partnumber: str, datadict: Dict[str, pd.DataFrame], initialstock: int) -> List[Dict]:
         transactions = []
         today = datetime.now().date()
-        
+ 
         transactions.append({
             'Date': today.strftime('%m/%d/%Y'),
             'Transaction Type': 'Stock',
             'Receipt/Reqmt': '',
             'Available QTY': initialstock,
             'ASN': '',
-            '_running_qty': initialstock
+            '_running_qty': initialstock,
         })
-        
+ 
         consumptiondata = self.buildpartconsumption(partnumber, datadict)
         receiptdata = self.buildpartreceipts(partnumber, datadict)
         currentqty = initialstock
-        
+ 
         for dayoffset in range(1, 91):
             date = today + timedelta(days=dayoffset)
             datestr = date.strftime('%m/%d/%Y')
-            
+ 
             if date in receiptdata:
                 for receipt in receiptdata[date]:
                     currentqty += receipt['quantity']
@@ -478,10 +431,10 @@ class CoverageAnalysisEngine:
                         'Transaction Type': 'GR',
                         'Receipt/Reqmt': f"+{receipt['quantity']:,}",
                         'Available QTY': currentqty,
-                        'ASN': '',  # Will add ASN logic later
-                        '_running_qty': currentqty
+                        'ASN': '',
+                        '_running_qty': currentqty,
                     })
-
+ 
             if date in consumptiondata:
                 consumptionqty = int(consumptiondata[date])
                 if consumptionqty > 0:
@@ -492,211 +445,223 @@ class CoverageAnalysisEngine:
                         'Receipt/Reqmt': f"-{consumptionqty:,}",
                         'Available QTY': currentqty,
                         'ASN': '',
-                        '_running_qty': currentqty
+                        '_running_qty': currentqty,
                     })
-
+ 
         return transactions
-    
+ 
     def getinitialstock(self, partnumber, currentinventory):
         if currentinventory.empty or 'PART_NO' not in currentinventory.columns:
             return 0
-        
-        partrows = currentinventory[currentinventory['PART_NO'].astype(str).str.upper() == partnumber.upper()]
+ 
+        partrows = currentinventory[
+            currentinventory['PART_NO'].astype(str).str.upper() == partnumber.upper()
+        ]
         if partrows.empty:
             return 0
-        
+ 
         totalstock = 0
         if 'BEGINNING_INVENTORY_TODAY' in partrows.columns:
             totalstock += partrows['BEGINNING_INVENTORY_TODAY'].fillna(0).sum()
         if 'INVENTORY_YARD_TODAY' in partrows.columns:
             totalstock += partrows['INVENTORY_YARD_TODAY'].fillna(0).sum()
-            
+        if 'INVENTORY_PORT_TODAY' in partrows.columns:
+            totalstock += partrows['INVENTORY_PORT_TODAY'].fillna(0).sum()
+ 
         return int(totalstock)
-        
+ 
     def buildpartconsumption(self, partnumber, datadict):
         consumptionbydate = {}
-        
+        target = partnumber.upper()
+ 
         for reqkey in ['req_split_1', 'req_split_2', 'req_split_3']:
             reqdf = datadict[reqkey]
-            
             if reqdf.empty or 'ARTNR' not in reqdf.columns:
                 continue
-            
-            partreqs = reqdf[reqdf['ARTNR'].astype(str).str.upper() == partnumber.upper()]
-            
-            if partreqs.empty:
-                continue
-            
-            datecol = self.findcolumn(partreqs, ['PRODDAG', 'DATE', 'PROD_DATE'])
-            qtycol = self.findcolumn(partreqs, ['ARTAN', 'QTY', 'QUANTITY'])
-            
+ 
+            datecol = self.findcolumn(reqdf, ['PRODDAG', 'DATE', 'PROD_DATE'])
+            qtycol = self.findcolumn(reqdf, ['ARTAN', 'QTY', 'QUANTITY'])
             if not datecol or not qtycol:
                 continue
-            
-            for _, row in partreqs.iterrows():
-                try:
-                    if pd.isna(row[datecol]):
-                        continue
-                    
-                    date = pd.to_datetime(row[datecol]).date()
-                    quantity = float(row[qtycol]) if not pd.isna(row[qtycol]) else 0
-                    
-                    if date not in consumptionbydate:
-                        consumptionbydate[date] = 0
-                        
-                    consumptionbydate[date] += quantity
-                    
-                except:
+ 
+            try:
+                partreqs = reqdf[reqdf['ARTNR'].astype(str).str.upper() == target]
+                if partreqs.empty:
                     continue
-        
+ 
+                sub = pd.DataFrame({
+                    'date': pd.to_datetime(partreqs[datecol], errors='coerce').dt.date,
+                    'qty': pd.to_numeric(partreqs[qtycol], errors='coerce').fillna(0),
+                })
+                sub = sub.dropna(subset=['date'])
+ 
+                for date, qty in sub.groupby('date')['qty'].sum().items():
+                    consumptionbydate[date] = consumptionbydate.get(date, 0) + qty
+ 
+            except Exception:
+                continue
+ 
         return consumptionbydate
-    
+ 
     def buildpartreceipts(self, partnumber, datadict):
         receiptbydate = {}
         splunkdf = datadict.get('splunk_data', pd.DataFrame())
-
-        if splunkdf.empty:
+ 
+        if splunkdf.empty or 'Part Number' not in splunkdf.columns:
             return receiptbydate
-
-        partcol = self.findcolumn(splunkdf, ['Part Number', 'PART_NO', 'PART', 'ARTNR', 'PART_NUMBER'])
-        if not partcol:
-            return receiptbydate
-
-        partreceipts = splunkdf[splunkdf[partcol].astype(str).str.upper().str.strip() == partnumber.upper()]
-
+ 
+        target = partnumber.upper()
+        partreceipts = splunkdf[
+            splunkdf['Part Number'].astype(str).str.upper().str.strip() == target
+        ]
         if partreceipts.empty:
             return receiptbydate
-
-        datecol = self.findcolumn(partreceipts, ['Load Delivery Date Final', 'DELIVERY_DATE', 'RECEIPT_DATE', 'DATE', 'GR_DATE'])
-        qtycol = self.findcolumn(partreceipts, ['Pieces', 'TO Quantity', 'Load Quantity', 'Quantity', 'QTY', 'QUANTITY', 'Receipt Qty'])
-
-        if not datecol or not qtycol:
+ 
+        date_col = 'Load Delivery Date Final'
+        if date_col not in partreceipts.columns:
             return receiptbydate
-
-        for _, row in partreceipts.iterrows():
-            try:
-                if pd.isna(row[datecol]):
-                    continue
-
-                d = pd.to_datetime(row[datecol]).date() + timedelta(days=1)
-                if d.weekday() == 5:
-                    d += timedelta(days=2)
-                elif d.weekday() == 6:
-                    d += timedelta(days=1)
-                date = d
-                quantity = float(row[qtycol]) if not pd.isna(row[qtycol]) else 0
-
-                if quantity <= 0:
-                    continue
-
-                receiptbydate.setdefault(date, []).append({
-                    'quantity': int(quantity),
+ 
+        qty_col = self.findcolumn(splunkdf, [
+            'Quantity', 'QTY', 'Qty', 'QUANTITY', 'ARTAN',
+            'Load Quantity', 'TO Quantity', 'Receipt Qty', 'Receipt QTY',
+            'Pieces', 'Units',
+        ])
+ 
+        try:
+            def _shift(d):
+                if not pd.notna(d): return d
+                d = d + timedelta(days=1)
+                if d.weekday() == 5: d += timedelta(days=2)
+                elif d.weekday() == 6: d += timedelta(days=1)
+                return d
+            df = partreceipts.copy()
+            df['_date'] = pd.to_datetime(df[date_col], errors='coerce').dt.date.apply(_shift)
+            df['_qty'] = (pd.to_numeric(df[qty_col], errors='coerce').fillna(0) if qty_col else pd.Series(0, index=df.index))
+            df = df[df['_qty'] > 0].dropna(subset=['_date'])
+ 
+            for _, row in df.iterrows():
+                receiptbydate.setdefault(row['_date'], []).append({
+                    'quantity': int(row['_qty']),
                     'asn': str(row.get('TO Number', '')),
                     'po': '',
                 })
-
-            except:
-                continue
-
+        except Exception:
+            pass
+ 
         return receiptbydate
-
-    def parsesplunkdata(self, splunkdf: pd.DataFrame) -> Dict:
-        if splunkdf.empty:
-            return {}
-
-        partcol = self.findcolumn(splunkdf, ['Part Number', 'PART_NO', 'PART', 'ARTNR', 'PART_NUMBER'])
-        datecol = self.findcolumn(splunkdf, ['Load Delivery Date Final', 'DELIVERY_DATE', 'RECEIPT_DATE', 'DATE', 'GR_DATE'])
-        qtycol = self.findcolumn(splunkdf, ['Pieces', 'TO Quantity', 'Load Quantity', 'Quantity', 'QTY', 'QUANTITY', 'Receipt Qty'])
-
-        if not partcol or not datecol:
-            print(f"[Splunk] Missing required columns. Available: {splunkdf.columns.tolist()}")
-            return {}
-
-        if qtycol is None:
-            print(f"[Splunk] WARNING: No quantity column found. Available: {splunkdf.columns.tolist()}")
-        else:
-            print(f"[Splunk] Using part='{partcol}', date='{datecol}', qty='{qtycol}'")
-
-        def _shift_to_weekday(d):
-            if not pd.notna(d):
-                return d
-            d = d + timedelta(days=1)
-            if d.weekday() == 5:    # Saturday -> Monday
-                d += timedelta(days=2)
-            elif d.weekday() == 6:  # Sunday -> Monday
-                d += timedelta(days=1)
-            return d
-
-        try:
-            df = splunkdf[[partcol, datecol] + ([qtycol] if qtycol else [])].copy()
-            df['_part'] = df[partcol].astype(str).str.upper().str.strip()
-            df['_date'] = pd.to_datetime(df[datecol], errors='coerce').dt.date.apply(_shift_to_weekday)
-            df['_qty'] = pd.to_numeric(df[qtycol], errors='coerce').fillna(0) if qtycol else 0
-            df = df[df['_qty'] > 0].dropna(subset=['_date'])
-
-            grouped = df.groupby(['_date', '_part'])['_qty'].sum()
-
-            receiptbydate: Dict = {}
-            for (date, partno), qty in grouped.items():
-                receiptbydate.setdefault(date, {})[partno] = qty
-
-            for date in receiptbydate:
-                receiptbydate[date] = pd.Series(receiptbydate[date])
-
-            print(f"[Splunk] Parsed {sum(len(v) for v in receiptbydate.values())} delivery rows across {len(receiptbydate)} dates")
-            return receiptbydate
-
-        except Exception as e:
-            print(f"[Splunk] Error parsing data: {e}")
-            return {}
-
+ 
     def findcolumn(self, df, possiblenames):
         for name in possiblenames:
             if name in df.columns:
                 return name
         return None
-    
+ 
+    def safefloat(self, value, default=0.0):
+        try:
+            if pd.isna(value):
+                return default
+        except (TypeError, ValueError):
+            pass
+        try:
+            return float(str(value).replace(',', ''))
+        except (ValueError, TypeError):
+            return default
+ 
+    def parsesplunkreceivingdata(self, splunkdf: pd.DataFrame) -> Dict:
+        if splunkdf.empty:
+            return {}
+ 
+        part_col = 'Part Number'
+        date_col = 'Load Delivery Date Final'
+ 
+        if part_col not in splunkdf.columns or date_col not in splunkdf.columns:
+            print(f"[Splunk] Missing required columns. Available: {splunkdf.columns.tolist()}")
+            return {}
+ 
+        qty_col = self.findcolumn(splunkdf, [
+            'Quantity', 'QTY', 'Qty', 'QUANTITY', 'ARTAN',
+            'Load Quantity', 'TO Quantity', 'Receipt Qty', 'Receipt QTY',
+            'Pieces', 'Units',
+        ])
+ 
+        if qty_col is None:
+            print(f"[Splunk] WARNING: No quantity column found. Available columns: {splunkdf.columns.tolist()}")
+        else:
+            print(f"[Splunk] Using quantity column: '{qty_col}'")
+ 
+        try:
+            def shift_date(d):
+                if not pd.notna(d):
+                    return d
+                d = d + timedelta(days=1)        
+                if d.weekday() == 5:         
+                    d += timedelta(days=2)
+                elif d.weekday() == 6:             
+                    d += timedelta(days=1)
+                return d
+            
+            df = splunkdf[[part_col, date_col]].copy()
+            df['_part'] = df[part_col].astype(str).str.upper().str.strip()
+            df['_date'] = pd.to_datetime(df[date_col], errors='coerce').dt.date.apply(shift_date)
+            df['_qty'] = (
+                pd.to_numeric(splunkdf[qty_col], errors='coerce').fillna(0)
+                if qty_col
+                else pd.Series(0, index=splunkdf.index)
+            )
+            df = df[df['_qty'] > 0].dropna(subset=['_date'])
+ 
+            grouped = df.groupby(['_date', '_part'])['_qty'].sum()
+ 
+            receiptbydate: Dict = {}
+            for (date, partno), qty in grouped.items():
+                receiptbydate.setdefault(date, {})[partno] = qty
+ 
+            for date in receiptbydate:
+                receiptbydate[date] = pd.Series(receiptbydate[date])
+ 
+            return receiptbydate
+ 
+        except Exception as e:
+            print(f"Error parsing Splunk receiving data: {e}")
+            return {}
+ 
     def combineconsumptiondata(self, req1: pd.DataFrame, req2: pd.DataFrame, req3: pd.DataFrame) -> Dict:
-        consumptionbydate = {}
-        total_rows_processed = 0
-        
-        for i, reqdf in enumerate([req1, req2, req3], 1):
+        all_dfs = []
+ 
+        for reqdf in [req1, req2, req3]:
             if reqdf.empty or 'ARTNR' not in reqdf.columns:
                 continue
-            
+ 
             datecol = self.findcolumn(reqdf, ['PRODDAG', 'DATE', 'PROD_DATE'])
             qtycol = self.findcolumn(reqdf, ['ARTAN', 'QTY', 'QUANTITY'])
-            
             if not datecol or not qtycol:
                 continue
-            
-            rows_processed = 0
-            
-            for _, row in reqdf.iterrows():
-                try:
-                    if pd.isna(row[datecol]):
-                        continue
-                    
-                    date = pd.to_datetime(row[datecol]).date()
-                    partno = row['ARTNR']
-                    quantity = float(row[qtycol]) if not pd.isna(row[qtycol]) else 0
-                    
-                    if date not in consumptionbydate:
-                        consumptionbydate[date] = {}
-                    
-                    consumptionbydate[date][partno] = consumptionbydate[date].get(partno, 0) + quantity
-                    rows_processed += 1
-                    
-                except:
-                    continue
-        
-            total_rows_processed += rows_processed
-        
+ 
+            try:
+                subset = reqdf[['ARTNR', datecol, qtycol]].copy()
+                subset.columns = ['ARTNR', '_date_raw', '_qty']
+                subset['_qty'] = pd.to_numeric(subset['_qty'], errors='coerce').fillna(0)
+                subset['_date'] = pd.to_datetime(subset['_date_raw'], errors='coerce').dt.date
+                subset = subset.dropna(subset=['_date'])
+                all_dfs.append(subset[['ARTNR', '_date', '_qty']])
+            except Exception:
+                continue
+ 
+        if not all_dfs:
+            return {}
+ 
+        combined = pd.concat(all_dfs, ignore_index=True)
+        grouped = combined.groupby(['_date', 'ARTNR'])['_qty'].sum()
+ 
+        consumptionbydate: Dict = {}
+        for (date, partno), qty in grouped.items():
+            consumptionbydate.setdefault(date, {})[partno] = qty
+
         for date in consumptionbydate:
             consumptionbydate[date] = pd.Series(consumptionbydate[date])
-        
+ 
         return consumptionbydate
-    
+ 
     def exporttocsv(self, coveragedf: pd.DataFrame, filename: str) -> bool:
         try:
             coveragedf.to_csv(filename, index=False)
