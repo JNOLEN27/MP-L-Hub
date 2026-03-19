@@ -337,7 +337,7 @@ class CoverageAnalysisEngine:
             datadict['req_split_2'],
             datadict['req_split_3']
         )
-        receiptdata = self.parsesplunkreceivingdata(datadict.get('splunk_data', pd.DataFrame()))
+        receiptdata = self.parsegtbrdata(datadict.get('gtbr_data', pd.DataFrame()))
 
         coveragedf['Initial_Stock'] = pd.to_numeric(coveragedf['Initial_Stock'], errors='coerce').fillna(0)
 
@@ -600,6 +600,43 @@ class CoverageAnalysisEngine:
         
         return receiptbydate
             
+    def parsegtbrdata(self, gtbrdf: pd.DataFrame) -> Dict:
+        if gtbrdf.empty:
+            return {}
+
+        partcol = self.findcolumn(gtbrdf, ['ARTNR', 'PART_NO', 'PART', 'PART_NUMBER'])
+        datecol = self.findcolumn(gtbrdf, ['ANK_TID_TIDIGAST', 'ANK_TID_SENAST', 'DELIVERY_DATE', 'RECEIPT_DATE', 'GR_DATE'])
+        qtycol = self.findcolumn(gtbrdf, ['ARTAN', 'QTY', 'QUANTITY', 'RECEIPT_QTY'])
+
+        if not partcol or not datecol or not qtycol:
+            print(f"[GTBR] Missing required columns. Available: {gtbrdf.columns.tolist()}")
+            return {}
+
+        print(f"[GTBR] Using part='{partcol}', date='{datecol}', qty='{qtycol}'")
+
+        try:
+            df = gtbrdf[[partcol, datecol, qtycol]].copy()
+            df['_part'] = df[partcol].astype(str).str.upper().str.strip()
+            df['_date'] = pd.to_datetime(df[datecol], errors='coerce').dt.date
+            df['_qty'] = pd.to_numeric(df[qtycol], errors='coerce').fillna(0)
+            df = df[df['_qty'] > 0].dropna(subset=['_date'])
+
+            grouped = df.groupby(['_date', '_part'])['_qty'].sum()
+
+            receiptbydate: Dict = {}
+            for (date, partno), qty in grouped.items():
+                receiptbydate.setdefault(date, {})[partno] = qty
+
+            for date in receiptbydate:
+                receiptbydate[date] = pd.Series(receiptbydate[date])
+
+            print(f"[GTBR] Parsed {sum(len(v) for v in receiptbydate.values())} delivery rows across {len(receiptbydate)} dates")
+            return receiptbydate
+
+        except Exception as e:
+            print(f"[GTBR] Error parsing data: {e}")
+            return {}
+
     def findcolumn(self, df, possiblenames):
         for name in possiblenames:
             if name in df.columns:
