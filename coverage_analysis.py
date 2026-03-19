@@ -589,40 +589,54 @@ class CoverageAnalysisEngine:
         else:
             print(f"[Splunk] Using quantity column: '{qty_col}'")
  
+        print(f"[Splunk] Raw dataframe shape: {splunkdf.shape}")
+        print(f"[Splunk] Sample dates: {splunkdf[date_col].head(3).tolist()}")
+        print(f"[Splunk] Sample parts: {splunkdf[part_col].head(3).tolist()}")
+        if qty_col:
+            print(f"[Splunk] Sample qtys: {splunkdf[qty_col].head(3).tolist()}")
+
         try:
             def shift_date(d):
                 if not pd.notna(d):
                     return d
-                d = d + timedelta(days=1)        
-                if d.weekday() == 5:         
+                d = d + timedelta(days=1)
+                if d.weekday() == 5:
                     d += timedelta(days=2)
-                elif d.weekday() == 6:             
+                elif d.weekday() == 6:
                     d += timedelta(days=1)
                 return d
-            
+
             df = splunkdf[[part_col, date_col]].copy()
             df['_part'] = df[part_col].astype(str).str.upper().str.strip()
             df['_date'] = pd.to_datetime(df[date_col], errors='coerce').dt.date.apply(shift_date)
-            df['_qty'] = (
-                pd.to_numeric(splunkdf[qty_col], errors='coerce').fillna(0)
-                if qty_col
-                else pd.Series(0, index=splunkdf.index)
-            )
+
+            if qty_col:
+                qty_series = splunkdf[qty_col].astype(str).str.replace(',', '', regex=False)
+                df['_qty'] = pd.to_numeric(qty_series, errors='coerce').fillna(0)
+            else:
+                df['_qty'] = 0
+
+            print(f"[Splunk] Rows before filter: {len(df)}, non-zero qty: {(df['_qty'] > 0).sum()}, valid dates: {df['_date'].notna().sum()}")
+
             df = df[df['_qty'] > 0].dropna(subset=['_date'])
- 
+            print(f"[Splunk] Rows after filter: {len(df)}")
+
             grouped = df.groupby(['_date', '_part'])['_qty'].sum()
- 
+            print(f"[Splunk] Unique receipt dates found: {len(grouped.index.get_level_values(0).unique())}")
+
             receiptbydate: Dict = {}
             for (date, partno), qty in grouped.items():
                 receiptbydate.setdefault(date, {})[partno] = qty
- 
+
             for date in receiptbydate:
                 receiptbydate[date] = pd.Series(receiptbydate[date])
- 
+
+            print(f"[Splunk] First 5 receipt dates: {sorted(receiptbydate.keys())[:5]}")
             return receiptbydate
- 
+
         except Exception as e:
             print(f"Error parsing Splunk receiving data: {e}")
+            import traceback; traceback.print_exc()
             return {}
  
     def combineconsumptiondata(self, req1: pd.DataFrame, req2: pd.DataFrame, req3: pd.DataFrame) -> Dict:
