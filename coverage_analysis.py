@@ -363,6 +363,10 @@ class CoverageAnalysisEngine:
         # Days 1+: previous day's ending value + deliveries - consumption
         for dayoffset in range(1, daysforward):
             date = today + timedelta(days=dayoffset)
+
+            if date.weekday() >= 5:
+                continue
+
             datestr = date.strftime('%Y_%m_%d')
             colname = f'Day_{dayoffset:03d}_{datestr}'
 
@@ -574,7 +578,12 @@ class CoverageAnalysisEngine:
                 if pd.isna(row[datecol]):
                     continue
 
-                date = pd.to_datetime(row[datecol]).date() + timedelta(days=1)
+                d = pd.to_datetime(row[datecol]).date() + timedelta(days=1)
+                if d.weekday() == 5:
+                    d += timedelta(days=2)
+                elif d.weekday() == 6:
+                    d += timedelta(days=1)
+                date = d
                 quantity = float(row[qtycol]) if not pd.isna(row[qtycol]) else 0
 
                 if quantity <= 0:
@@ -608,12 +617,20 @@ class CoverageAnalysisEngine:
         else:
             print(f"[Splunk] Using part='{partcol}', date='{datecol}', qty='{qtycol}'")
 
+        def _shift_to_weekday(d):
+            if not pd.notna(d):
+                return d
+            d = d + timedelta(days=1)
+            if d.weekday() == 5:    # Saturday -> Monday
+                d += timedelta(days=2)
+            elif d.weekday() == 6:  # Sunday -> Monday
+                d += timedelta(days=1)
+            return d
+
         try:
             df = splunkdf[[partcol, datecol] + ([qtycol] if qtycol else [])].copy()
             df['_part'] = df[partcol].astype(str).str.upper().str.strip()
-            df['_date'] = pd.to_datetime(df[datecol], errors='coerce').dt.date.apply(
-                lambda d: d + timedelta(days=1) if pd.notna(d) else d
-            )
+            df['_date'] = pd.to_datetime(df[datecol], errors='coerce').dt.date.apply(_shift_to_weekday)
             df['_qty'] = pd.to_numeric(df[qtycol], errors='coerce').fillna(0) if qtycol else 0
             df = df[df['_qty'] > 0].dropna(subset=['_date'])
 
