@@ -574,7 +574,7 @@ class CoverageAnalysisEngine:
                 if pd.isna(row[datecol]):
                     continue
 
-                date = pd.to_datetime(row[datecol]).date()
+                date = pd.to_datetime(row[datecol]).date() + timedelta(days=1)
                 quantity = float(row[qtycol]) if not pd.isna(row[qtycol]) else 0
 
                 if quantity <= 0:
@@ -611,7 +611,9 @@ class CoverageAnalysisEngine:
         try:
             df = splunkdf[[partcol, datecol] + ([qtycol] if qtycol else [])].copy()
             df['_part'] = df[partcol].astype(str).str.upper().str.strip()
-            df['_date'] = pd.to_datetime(df[datecol], errors='coerce').dt.date
+            df['_date'] = pd.to_datetime(df[datecol], errors='coerce').dt.date.apply(
+                lambda d: d + timedelta(days=1) if pd.notna(d) else d
+            )
             df['_qty'] = pd.to_numeric(df[qtycol], errors='coerce').fillna(0) if qtycol else 0
             df = df[df['_qty'] > 0].dropna(subset=['_date'])
 
