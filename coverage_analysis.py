@@ -15,7 +15,7 @@ class CoverageAnalysisEngine:
                 'req_split_1': self.import_manager.loaddata("part_requirement_split_1"),
                 'req_split_2': self.import_manager.loaddata("part_requirement_split_2"),
                 'req_split_3': self.import_manager.loaddata("part_requirement_split_3"),
-                'gtbr_data': self.import_manager.loaddata("goods_to_be_received")
+                'splunk_data': self.import_manager.loaddata("splunk_receiving_data")
             }
             
             if data['current_inventory'].empty or data['master_data'].empty:
@@ -337,7 +337,7 @@ class CoverageAnalysisEngine:
             datadict['req_split_2'],
             datadict['req_split_3']
         )
-        receiptdata = self.parsegtbrdata(datadict.get('gtbr_data', pd.DataFrame()))
+        receiptdata = self.parsesplunkdata(datadict.get('splunk_data', pd.DataFrame()))
 
         coveragedf['Initial_Stock'] = pd.to_numeric(coveragedf['Initial_Stock'], errors='coerce').fillna(0)
 
@@ -549,76 +549,70 @@ class CoverageAnalysisEngine:
     
     def buildpartreceipts(self, partnumber, datadict):
         receiptbydate = {}
-        gtbrdf = datadict['gtbr_data']
-        
-        if gtbrdf.empty:
+        splunkdf = datadict.get('splunk_data', pd.DataFrame())
+
+        if splunkdf.empty:
             return receiptbydate
-        
-        partcol = self.findcolumn(gtbrdf, ['PART_NO', 'PART', 'ARTNR', 'PART_NUMBER'])
+
+        partcol = self.findcolumn(splunkdf, ['Part Number', 'PART_NO', 'PART', 'ARTNR', 'PART_NUMBER'])
         if not partcol:
             return receiptbydate
-        
-        partreceipts = gtbrdf[gtbrdf[partcol].astype(str).str.upper() == partnumber.upper()]
-        
+
+        partreceipts = splunkdf[splunkdf[partcol].astype(str).str.upper().str.strip() == partnumber.upper()]
+
         if partreceipts.empty:
-            print(f"DEBUG: No GTBR records found for part {partnumber}")
             return receiptbydate
-        
-        datecol = self.findcolumn(partreceipts, [
-            'DELIVERY_DATE', 'RECEIPT_DATE', 'DATE', 'GR_DATE', 'PROD_DATE',
-            'ANK_TID_TIDIGAST', 'ANK_TID_SENAST',
-            'FRAKT_TID_TIDIGAST', 'FRAKT_TID_SENAST'
-        ])
-        
-        qtycol = self.findcolumn(partreceipts, ['QTY', 'QUANTITY', 'RECEIPT_QTY', 'ARTAN'])
-        
+
+        datecol = self.findcolumn(partreceipts, ['Load Delivery Date Final', 'DELIVERY_DATE', 'RECEIPT_DATE', 'DATE', 'GR_DATE'])
+        qtycol = self.findcolumn(partreceipts, ['Pieces', 'TO Quantity', 'Load Quantity', 'Quantity', 'QTY', 'QUANTITY', 'Receipt Qty'])
+
         if not datecol or not qtycol:
             return receiptbydate
-        
+
         for _, row in partreceipts.iterrows():
             try:
                 if pd.isna(row[datecol]):
                     continue
-                
+
                 date = pd.to_datetime(row[datecol]).date()
                 quantity = float(row[qtycol]) if not pd.isna(row[qtycol]) else 0
-                
+
                 if quantity <= 0:
                     continue
-                
-                if date not in receiptbydate:
-                    receiptbydate[date] = []
-                    
-                receiptbydate[date].append({
+
+                receiptbydate.setdefault(date, []).append({
                     'quantity': int(quantity),
-                    'asn': row.get('ASN', ''),
-                    'po': row.get('PO', '')
+                    'asn': str(row.get('TO Number', '')),
+                    'po': '',
                 })
-                
+
             except:
                 continue
-        
+
         return receiptbydate
-            
-    def parsegtbrdata(self, gtbrdf: pd.DataFrame) -> Dict:
-        if gtbrdf.empty:
+
+    def parsesplunkdata(self, splunkdf: pd.DataFrame) -> Dict:
+        if splunkdf.empty:
             return {}
 
-        partcol = self.findcolumn(gtbrdf, ['ARTNR', 'PART_NO', 'PART', 'PART_NUMBER'])
-        datecol = self.findcolumn(gtbrdf, ['ANK_TID_TIDIGAST', 'ANK_TID_SENAST', 'DELIVERY_DATE', 'RECEIPT_DATE', 'GR_DATE'])
-        qtycol = self.findcolumn(gtbrdf, ['ARTAN', 'QTY', 'QUANTITY', 'RECEIPT_QTY'])
+        partcol = self.findcolumn(splunkdf, ['Part Number', 'PART_NO', 'PART', 'ARTNR', 'PART_NUMBER'])
+        datecol = self.findcolumn(splunkdf, ['Load Delivery Date Final', 'DELIVERY_DATE', 'RECEIPT_DATE', 'DATE', 'GR_DATE'])
+        qtycol = self.findcolumn(splunkdf, ['Pieces', 'TO Quantity', 'Load Quantity', 'Quantity', 'QTY', 'QUANTITY', 'Receipt Qty'])
 
-        if not partcol or not datecol or not qtycol:
-            print(f"[GTBR] Missing required columns. Available: {gtbrdf.columns.tolist()}")
+        if not partcol or not datecol:
+            print(f"[Splunk] Missing required columns. Available: {splunkdf.columns.tolist()}")
             return {}
 
-        print(f"[GTBR] Using part='{partcol}', date='{datecol}', qty='{qtycol}'")
+        if qtycol is None:
+            print(f"[Splunk] WARNING: No quantity column found. Available: {splunkdf.columns.tolist()}")
+        else:
+            print(f"[Splunk] Using part='{partcol}', date='{datecol}', qty='{qtycol}'")
 
         try:
-            df = gtbrdf[[partcol, datecol, qtycol]].copy()
+            df = splunkdf[[partcol, datecol] + ([qtycol] if qtycol else [])].copy()
             df['_part'] = df[partcol].astype(str).str.upper().str.strip()
             df['_date'] = pd.to_datetime(df[datecol], errors='coerce').dt.date
-            df['_qty'] = pd.to_numeric(df[qtycol], errors='coerce').fillna(0)
+            df['_qty'] = pd.to_numeric(df[qtycol], errors='coerce').fillna(0) if qtycol else 0
             df = df[df['_qty'] > 0].dropna(subset=['_date'])
 
             grouped = df.groupby(['_date', '_part'])['_qty'].sum()
@@ -630,11 +624,11 @@ class CoverageAnalysisEngine:
             for date in receiptbydate:
                 receiptbydate[date] = pd.Series(receiptbydate[date])
 
-            print(f"[GTBR] Parsed {sum(len(v) for v in receiptbydate.values())} delivery rows across {len(receiptbydate)} dates")
+            print(f"[Splunk] Parsed {sum(len(v) for v in receiptbydate.values())} delivery rows across {len(receiptbydate)} dates")
             return receiptbydate
 
         except Exception as e:
-            print(f"[GTBR] Error parsing data: {e}")
+            print(f"[Splunk] Error parsing data: {e}")
             return {}
 
     def findcolumn(self, df, possiblenames):
