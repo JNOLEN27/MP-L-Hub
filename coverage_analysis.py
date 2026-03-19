@@ -632,6 +632,13 @@ class CoverageAnalysisEngine:
                 receiptbydate[date] = pd.Series(receiptbydate[date])
 
             print(f"[Splunk] First 5 receipt dates: {sorted(receiptbydate.keys())[:5]}")
+            sample_date = sorted(receiptbydate.keys())[0] if receiptbydate else None
+            if sample_date:
+                sample_parts = list(receiptbydate[sample_date].index[:5])
+                print(f"[Splunk] Sample parts on {sample_date}: {sample_parts}")
+            # Also check how many rows were dropped due to NaN part number
+            nan_parts = (df['_part'] == 'NAN').sum() if len(df) > 0 else 0
+            print(f"[Splunk] Rows with NAN part after filter: {nan_parts}")
             return receiptbydate
 
         except Exception as e:
