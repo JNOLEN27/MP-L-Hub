@@ -105,7 +105,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
         tabs.addTab(calloffforecasttab, "Call-off Forecast and Waterfall")
         tabs.addTab(ldjiscoveragetab, "LDJIS Coverage")
         tabs.addTab(alertstab, "Alerts Breakdown")
- 
+        tabs.addTab(piwdtab, "PIWD Report")
+
         layout.addWidget(tabs)
  
         self.statusBar().showMessage(f"Logged in as: {self.userdata['username']}")
@@ -692,8 +693,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
         btnlayout.addWidget(exportbtn)
         
         btnlayout.addStretch()
-        layout.addWidget(btnlayout)
-        
+        layout.addLayout(btnlayout)
+
         self.piwdfiltersection = self.createpiwdfiltersection()
         layout.addWidget(self.piwdfiltersection)
         
@@ -710,6 +711,35 @@ class SupplyChainCoordinationWindow(QMainWindow):
         widget.setLayout(layout)
         return widget
  
+    def createpiwdfiltersection(self):
+        widget = QWidget()
+        widget.setMaximumHeight(190)
+
+        layout = QHBoxLayout()
+
+        filterlabel = QLabel("Filters:")
+        filterlabel.setFont(QFont("Arial", 12, QFont.Bold))
+        filterlabel.setAlignment(Qt.AlignTop)
+        layout.addWidget(filterlabel)
+
+        self.piwd_scc_filter = self.createmultiselectdropdown("Select SCC Names...", "SCC")
+        self.piwd_scc_filter.selectionChanged.connect(self.applypiwdfilters)
+        layout.addWidget(self.piwd_scc_filter)
+
+        self.piwd_part_filter = self.createmultiselectdropdown("Select Parts...", "Part")
+        self.piwd_part_filter.selectionChanged.connect(self.applypiwdfilters)
+        layout.addWidget(self.piwd_part_filter)
+
+        clearfiltersbtn = QPushButton("Clear All Filters")
+        clearfiltersbtn.clicked.connect(self.clearpiwdfilters)
+        clearfiltersbtn.setMaximumWidth(120)
+        clearfiltersbtn.setMaximumHeight(30)
+        layout.addWidget(clearfiltersbtn)
+
+        layout.addStretch()
+        widget.setLayout(layout)
+        return widget
+
     def createcalloffsearchsection(self):
         widget = QWidget()
         widget.setMaximumHeight(100)
@@ -1663,7 +1693,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.piwd_scc_filter.additems(piwddf['SCC'].dropna().unique())
         
         if 'Part' in piwddf.columns:
-            self.piwddf_part_filter.additems(piwddf['Part'].dropna().unique())
+            self.piwd_part_filter.additems(piwddf['Part'].dropna().unique())
             
     def applypiwdfilters(self):
         if not hasattr(self, 'originalpiwddf'):
@@ -1775,7 +1805,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     
         finally:
             self.piwdtable.setUpdatesEnabled(True)
-            self.piwdtable.resizeColumnToContents()
+            self.piwdtable.resizeColumnsToContents()
             self.piwdtable.setSortingEnabled(True)
                   
     def exportpiwdreport(self):
@@ -1789,7 +1819,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 cols = [self.piwdtable.horizontalHeaderItem(c).text() for c in range(self.piwdtable.columnCount())]
                 rows = []
                 for r in range(self.piwdtable.rowCount()):
-                    rows.append([self.piwdtable.item(r, c).text() if self.piwdtablee.item(r, c) else '' for c in range(self.piwdtable.columnCount())])
+                    rows.append([self.piwdtable.item(r, c).text() if self.piwdtable.item(r, c) else '' for c in range(self.piwdtable.columnCount())])
                 pd.DataFrame(rows, columns=cols).to_csv(filename, index=False)
                 QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
             except Exception as e:
