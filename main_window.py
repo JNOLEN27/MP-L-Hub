@@ -350,7 +350,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         return SimpleMultiSelectFilter(placeholdertext, filtertype)
  
-    def createsearchfilter(self, filtertype="MFG", columnname="SUPP_MFG"):
+    def createsearchfilter(self, filtertype="MFG", columnname="SUPP_MFG", onchange=None):
         widget = QWidget()
         widget.setFixedHeight(120)
         widget.setFixedWidth(180)
@@ -371,10 +371,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
         btnlayout = QHBoxLayout()
         btnlayout.setSpacing(2)
  
+        callback = onchange if onchange is not None else self.applyfilters
+ 
         searchbtn = QPushButton("✓")
         searchbtn.setMaximumHeight(22)
         searchbtn.setMaximumWidth(25)
-        searchbtn.clicked.connect(self.applyfilters)
+        searchbtn.clicked.connect(callback)
         searchbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; border: none; padding: 2px; border-radius: 3px;} QPushButton:hover {background-color: #45a049;}""")
         btnlayout.addWidget(searchbtn)
  
@@ -396,12 +398,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         layout.addStretch()
  
-        searchinput.returnPressed.connect(self.applyfilters)
+        searchinput.returnPressed.connect(callback)
  
         widget.searchinput = searchinput
         widget.statuslabel = statuslabel
         widget.filtertype = filtertype
         widget.columnname = columnname
+        widget.callback = callback
  
         widget.setLayout(layout)
         return widget
@@ -409,7 +412,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
     def clearsearchfilter(self, searchwidget):
         searchwidget.searchinput.clear()
         searchwidget.statuslabel.setText("")
-        self.applyfilters()
+        searchwidget.callback()
  
     def populatefilters(self, coveragedf):
         if 'SCC Name' in coveragedf.columns:
@@ -1708,7 +1711,20 @@ class SupplyChainCoordinationWindow(QMainWindow):
         selected_part = self.piwd_part_filter.getselecteditems()
         if selected_part and 'Part' in filtereddf.columns:
             filtereddf = filtereddf[filtereddf['Part'].isin(selected_part)]
-            
+ 
+        if hasattr(self, 'piwd_part_search') and 'Part' in filtereddf.columns:
+            searchtext = self.piwd_part_search.searchinput.text().strip().upper()
+            if searchtext:
+                if ',' in searchtext:
+                    codes = [c.strip() for c in searchtext.split(',') if c.strip()]
+                    filtereddf = filtereddf[filtereddf['Part'].astype(str).str.upper().isin(codes)]
+                    self.piwd_part_search.statuslabel.setText(f"Searching: {', '.join(codes)}")
+                else:
+                    filtereddf = filtereddf[filtereddf['Part'].astype(str).str.upper().str.contains(searchtext, na=False)]
+                    self.piwd_part_search.statuslabel.setText(f"Searching: {searchtext}")
+            else:
+                self.piwd_part_search.statuslabel.setText("")
+ 
         self.displaypiwdtable(filtereddf)
         
     def clearpiwdfilters(self):
@@ -1716,6 +1732,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.piwd_scc_filter.selectallitems()
         if hasattr(self, 'piwd_part_filter'):
             self.piwd_part_filter.selectallitems()
+        if hasattr(self, 'piwd_part_search'):
+            self.piwd_part_search.searchinput.clear()
+            self.piwd_part_search.statuslabel.setText("")
  
     def displayalertstable(self, alertdf: pd.DataFrame):
         if alertdf.empty:
