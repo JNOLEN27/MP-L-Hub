@@ -1,10 +1,54 @@
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout
+import re
+
+from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
 
+
+class WrappedButton(QPushButton):
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
+        self._label = QLabel(text, self)
+        self._label.setWordWrap(True)
+        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        self._defaultcolor = None
+        self._hovercolor = None
+
+    def setText(self, text):
+        self._label.setText(text)
+
+    def _parsecolor(self, block):
+        match = re.search(r'(?<!-)color\s*:\s*([^;]+)', block)
+        return match.group(1).strip() if match else None
+
+    def _applylabelcolor(self, color):
+        self._label.setStyleSheet(f"color: {color}; background-color: transparent;" if color else "background-color: transparent;")
+
+    def setStyleSheet(self, style):
+        super().setStyleSheet(style)
+        default_block = re.search(r'QPushButton\s*\{([^}]*)\}', style)
+        self._defaultcolor = self._parsecolor(default_block.group(1)) if default_block else None
+        hover_block = re.search(r'QPushButton:hover\s*\{([^}]*)\}', style)
+        self._hovercolor = self._parsecolor(hover_block.group(1)) if hover_block else None
+        self._applylabelcolor(self._defaultcolor)
+
+    def enterEvent(self, event):
+        self._applylabelcolor(self._hovercolor or self._defaultcolor)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._applylabelcolor(self._defaultcolor)
+        super().leaveEvent(event)
+
+    def resizeEvent(self, event):
+        self._label.setGeometry(self.rect())
+        super().resizeEvent(event)
+
 from app.auth.permissions import PermissionsManager
 from app.launcher.access_request_dialog import AccessRequestDialog
-from app.utils.config import WINDOWTITLE, LAUNCHERWINDOWSIZE, AVAILABLEAPPS, COLORPRIMARY, COLORSUCCESS, ADMINUSERS
+from app.utils.config import WINDOWTITLE, LAUNCHERWINDOWSIZE, AVAILABLEAPPS, COLORPRIMARY, COLORSUCCESS, ADMINUSERS, POWERUSERS
 
 class LauncherWindow(QMainWindow):
     openapprequested = pyqtSignal(str)
@@ -74,7 +118,7 @@ class LauncherWindow(QMainWindow):
             appname = appinfo['name']
             hasaccess = appname in userapps
             
-            btn = QPushButton(f"{appinfo['name']}")
+            btn = WrappedButton(appinfo['name'])
             btn.setMinimumHeight(100)
             btn.setFont(QFont("Arial", 11))
             
@@ -101,12 +145,14 @@ class LauncherWindow(QMainWindow):
         requestbtn.clicked.connect(self.requestaccess)
         layout.addWidget(requestbtn)
         
-        if self.userdata['username'] in ADMINUSERS:
+        username = self.userdata['username']
+        if username in ADMINUSERS:
             adminbtn = QPushButton("Admin Panel")
             adminbtn.clicked.connect(self.openadminpanel)
             adminbtn.setStyleSheet(f"""QPushButton {{background-color: {COLORPRIMARY}; color: white; padding: 8px 15px;}}""")
             layout.addWidget(adminbtn)
-            
+
+        if username in ADMINUSERS or username in POWERUSERS:
             dataimportbtn = QPushButton("Data Imports")
             dataimportbtn.clicked.connect(self.opendataimportpanel)
             dataimportbtn.setStyleSheet(f"""QPushButton {{background-color: {COLORPRIMARY}; color: white; padding: 8px 15px;}}""")
@@ -147,7 +193,7 @@ class LauncherWindow(QMainWindow):
     def opendataimportpanel(self):
         from app.admin.data_imports import DataImportsWindow
         
-        dataimport = DataImportsWindow(self.userdata['username'], self)
+        dataimport = DataImportsWindow(self.userdata, self)
         dataimport.show()
         
     def closeevent(self, event):

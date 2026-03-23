@@ -1,5 +1,6 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtCore import Qt
 
 from app.launcher.login_dialog import LoginDialog
 from app.launcher.launcher_window import LauncherWindow
@@ -49,19 +50,19 @@ class Application:
         if appkey == "inventory_by_purpose":
             from app.inventory_by_purpose.main_window import InventorybyPurposeWindow
             window = InventorybyPurposeWindow(self.userdata, self.launcherwindow)
-            window.show()
-            self.openappwindows[appkey] = window
-            window.destroyed.connect(lambda: self.closeapplication(appkey))
-        
+
         elif appkey == "supply_chain_coordination":
             from app.supply_chain_coordination.main_window import SupplyChainCoordinationWindow
             window = SupplyChainCoordinationWindow(self.userdata, self.launcherwindow)
-            window.show()
-            self.openappwindows[appkey] = window
-            window.destroyed.connect(lambda: self.closeapplication(appkey))
-            
+
         else:
             QMessageBox.warning(self.launcherwindow, "Not Implemented", f"Application '{appkey}' is not yet implemented.")
+            return
+
+        window.setAttribute(Qt.WA_DeleteOnClose)
+        window.destroyed.connect(lambda: self.closeapplication(appkey))
+        self.openappwindows[appkey] = window
+        window.show()
         
     def closeapplication(self, appkey):
         if appkey in self.openappwindows:

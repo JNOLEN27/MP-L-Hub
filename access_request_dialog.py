@@ -20,16 +20,25 @@ class AccessRequestDialog(QDialog):
     
     def setupui(self):
         layout = QVBoxLayout()
+        header = QWidget()
+        header.setStyleSheet("background-color: #156082;")
+        headerlayout = QVBoxLayout(header)
+        headerlayout.setContentsMargins(0, 4, 0, 4)
+
         title = QLabel("Request Access to Applications")
         title.setFont(QFont("Arial", 14, QFont.Bold))
+        title.setStyleSheet("background-color: transparent; color: white")
         title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
-        
-        instructions = QLabel("Select the applications you need to access to. \n" "An administrator will review and approve your request. Reach out to Jack Nolen for escalation.")
+        headerlayout.addWidget(title)
+
+        instructions = QLabel("Select the applications you need to access to. \n"
+                              "An administrator will review and approve your request. Reach out to Jack Nolen for escalation.")
         instructions.setWordWrap(True)
+        instructions.setStyleSheet("background-color: transparent; color: white")
         instructions.setAlignment(Qt.AlignCenter)
-        layout.addWidget(instructions)
-        
+        headerlayout.addWidget(instructions)
+
+        layout.addWidget(header)
         layout.addSpacing(20)
         
         scroll = QScrollArea()
