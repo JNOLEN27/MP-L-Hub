@@ -9,6 +9,7 @@ from app.data.import_manager import DataImportManager
 from app.supply_chain_coordination.coverage_analysis import CoverageAnalysisEngine
 from app.supply_chain_coordination.waterfall_analysis import WaterfallAnalysisEngine
 from app.supply_chain_coordination.ldjis_coverage import LDJISCoverageEngine
+from app.supply_chain_coordination.odbc_config_dialog import ODBCConfigDialog
  
  
 class SupplyChainCoordinationWindow(QMainWindow):
@@ -552,6 +553,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         exportbtn = QPushButton("Export to CSV")
         exportbtn.clicked.connect(self.exportcoveragetable)
         buttonlayout.addWidget(exportbtn)
+ 
+        odbcbtn = QPushButton("ODBC Settings")
+        odbcbtn.clicked.connect(self.openodbcsettings)
+        odbcbtn.setStyleSheet("QPushButton {padding: 6px 14px; border: 1px solid #156082; color: #156082; border-radius: 4px;} QPushButton:hover {background-color: #e8f0fe;}")
+        buttonlayout.addWidget(odbcbtn)
  
         buttonlayout.addStretch()
         layout.addLayout(buttonlayout)
@@ -1846,6 +1852,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def refreshcoveragedata(self):
         self.generatecoverageanalysis()
+
+    def openodbcsettings(self):
+        dialog = ODBCConfigDialog(self.import_manager, self)
+        dialog.exec_()
  
     def exportcoveragetable(self):
         if not hasattr(self, 'currentcoveragedf') or self.currentcoveragedf.empty:
