@@ -386,7 +386,11 @@ class CoverageAnalysisEngine:
                     invrow['INVENTORY_YARD_TODAY'].astype(str).str.replace(',', '', regex=False),
                     errors='coerce',
                 ).fillna(0).sum()
-                initialstock = int(beginv + yardinv)
+                portinv = pd.to_numeric(
+                    invrow['INVENTORY_PORT_TODAY'].astype(str).str.replace(',', '', regex=False),
+                    errors='coerce',
+                ).fillna(0).sum()
+                initialstock = int(beginv + yardinv + portinv)
  
         return {
             'Part Number': partnumber,
