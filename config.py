@@ -46,11 +46,9 @@ AVAILABLEAPPS = {
 
 ADMINUSERS = ["jnolen"]
 
-# Power users have access to Data Imports but only for specific categories.
-# Keys must match the "category" field in data_imports.py's importbuttons list.
 POWERUSERS = {
-    # "username": ["category_key_1", "category_key_2"],
-}
+    "jnolen2": ["master_data", "current_inventory_report"]
+    }
 
 WINDOWTITLE = "VCCH Material Planning and Logistics Management Hub"
 LAUNCHERWINDOWSIZE = (600,400)
@@ -82,4 +80,3 @@ def getlatestforecastfile():
     return max(forecastfiles, key=lambda f: f.stat().st_mtime)
 
 ensuredirectories()
-    
