@@ -17,7 +17,7 @@ if errorlevel 1 (
 
 REM -- Install / upgrade build dependencies --
 echo Installing build dependencies...
-pip install --upgrade pyinstaller
+python -m pip install --upgrade pyinstaller
 if errorlevel 1 (
     echo ERROR: Failed to install PyInstaller.
     pause
@@ -26,7 +26,7 @@ if errorlevel 1 (
 
 REM -- Install app runtime dependencies --
 echo Installing runtime dependencies...
-pip install PyQt5 pandas numpy bcrypt
+python -m pip install PyQt5 pandas numpy bcrypt
 if errorlevel 1 (
     echo WARNING: Some dependencies may have failed. Continuing...
 )
@@ -38,7 +38,7 @@ if exist dist    rmdir /s /q dist
 
 REM -- Run PyInstaller --
 echo Building executable...
-pyinstaller "MP&L_Hub.spec"
+python -m PyInstaller "MP&L_Hub.spec"
 if errorlevel 1 (
     echo ERROR: PyInstaller build failed.
     pause
