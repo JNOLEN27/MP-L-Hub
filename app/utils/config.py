@@ -21,19 +21,7 @@ NETWORKCONFIGFILE = LOCALAPPDATA / "network_config.json"
 
 
 def getsharednetworkpath() -> Path:
-    """Return the configured shared network path, falling back to local data/."""
-    if NETWORKCONFIGFILE.exists():
-        try:
-            with open(NETWORKCONFIGFILE, 'r') as f:
-                data = json.load(f)
-            configured = data.get('shared_network_path', '').strip()
-            if configured:
-                p = Path(configured)
-                if p.exists():
-                    return p
-        except Exception:
-            pass
-    return BASEDIR / "data"
+    return Path(r"W:\_US Operations\P&M Americas\21200 Supplier Quality & Logistics\21220 Material Planning & Logistic\12 MP&L Hub\Data")
 
 
 def setsharednetworkpath(path: str) -> bool:
