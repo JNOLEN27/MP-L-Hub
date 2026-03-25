@@ -50,15 +50,15 @@ class Application:
         if appkey == "inventory_by_purpose":
             from app.inventory_by_purpose.main_window import InventorybyPurposeWindow
             window = InventorybyPurposeWindow(self.userdata, self.launcherwindow)
-
+            
         elif appkey == "supply_chain_coordination":
             from app.supply_chain_coordination.main_window import SupplyChainCoordinationWindow
             window = SupplyChainCoordinationWindow(self.userdata, self.launcherwindow)
-
+            
         else:
             QMessageBox.warning(self.launcherwindow, "Not Implemented", f"Application '{appkey}' is not yet implemented.")
             return
-
+        
         window.setAttribute(Qt.WA_DeleteOnClose)
         window.destroyed.connect(lambda: self.closeapplication(appkey))
         self.openappwindows[appkey] = window
