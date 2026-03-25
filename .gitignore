@@ -1,1 +1,16 @@
 __pycache__/
+*.pyc
+*.pyo
+
+# PyInstaller build output
+build/
+dist/
+*.spec.bak
+
+# Local data and user config (not shared via git)
+data/
+config/
+
+# IDE files
+.vscode/
+.idea/

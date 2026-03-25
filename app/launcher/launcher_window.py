@@ -6,7 +6,10 @@ from PyQt5.QtGui import QFont, QIcon
 
 from app.auth.permissions import PermissionsManager
 from app.launcher.access_request_dialog import AccessRequestDialog
-from app.utils.config import WINDOWTITLE, LAUNCHERWINDOWSIZE, AVAILABLEAPPS, COLORPRIMARY, COLORSUCCESS, ADMINUSERS, POWERUSERS
+from app.utils.config import (
+    WINDOWTITLE, LAUNCHERWINDOWSIZE, AVAILABLEAPPS, COLORPRIMARY, COLORSUCCESS,
+    ADMINUSERS, POWERUSERS, issharednetworkpathconfigured
+)
 
 class WrappedButton(QPushButton):
     def __init__(self, text, parent=None):
@@ -166,7 +169,18 @@ class LauncherWindow(QMainWindow):
             dataimportbtn.clicked.connect(self.opendataimportpanel)
             dataimportbtn.setStyleSheet("""QPushButton {background-color: #800000; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #ffb3b3; color: grey;}""")
             layout.addWidget(dataimportbtn)
-        
+
+        # Shared drive config — available to all users so everyone can point to the same folder
+        network_configured = issharednetworkpathconfigured()
+        networkbtn = QPushButton("Configure Shared Drive" if network_configured else "! Configure Shared Drive")
+        networkbtn.clicked.connect(self.opennetworkconfig)
+        net_color = "#156082" if network_configured else "#b05000"
+        networkbtn.setStyleSheet(
+            f"QPushButton {{background-color: {net_color}; color: white; padding: 8px 15px;}}"
+            "QPushButton:hover {background-color: #a2d8f0; color: grey;}"
+        )
+        layout.addWidget(networkbtn)
+
         layout.addStretch()
         
         exitbtn = QPushButton("Exit")
@@ -198,10 +212,19 @@ class LauncherWindow(QMainWindow):
         
     def opendataimportpanel(self):
         from app.admin.data_imports import DataImportsWindow
-        
+
         dataimport = DataImportsWindow(self.userdata, self)
         dataimport.show()
-        
+
+    def opennetworkconfig(self):
+        from app.launcher.network_config_dialog import NetworkConfigDialog
+        dialog = NetworkConfigDialog(self)
+        if dialog.exec_():
+            # Refresh the footer button color to reflect the new state
+            if self.centralWidget():
+                self.centralWidget().setParent(None)
+            self.setupui()
+
     def closeevent(self, event):
         reply = QMessageBox.question(self, "Exit Application", "Are you sure you want to exit?", QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:

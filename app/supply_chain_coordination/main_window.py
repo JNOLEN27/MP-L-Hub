@@ -1,10 +1,11 @@
+import json
 import numpy as np
 import pandas as pd
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, timedelta
-from app.utils.config import APPWINDOWSIZE
+from app.utils.config import APPWINDOWSIZE, getsharednetworkpath
 from app.data.import_manager import DataImportManager
 from app.supply_chain_coordination.coverage_analysis import CoverageAnalysisEngine
 from app.supply_chain_coordination.waterfall_analysis import WaterfallAnalysisEngine
@@ -21,6 +22,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.ldjiscoverageengine = LDJISCoverageEngine(self.import_manager)
         self.ldjismodelnames = ['EX90', 'PS3']
         self._comments_cache = None
+        self._alerts_cache = None
+        self._piwd_cache = None
         self.setWindowTitle("Supply Chain Coordination Application")
         self.resize(*APPWINDOWSIZE)
         self.setupui()
@@ -1502,7 +1505,131 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         except Exception as e:
             print(f"Error saving comment: {e}")
- 
+
+    # ------------------------------------------------------------------ #
+    #  Alerts Breakdown persistence                                        #
+    # ------------------------------------------------------------------ #
+
+    def _alertsfile(self):
+        return getsharednetworkpath() / "alertsdata.json"
+
+    def _loadalertsdata(self):
+        f = self._alertsfile()
+        if f.exists():
+            try:
+                with open(f, 'r') as fp:
+                    return json.load(fp)
+            except Exception as e:
+                print(f"Error loading alerts data: {e}")
+        return {}
+
+    def _savealertsdata(self, data: dict):
+        f = self._alertsfile()
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            with open(f, 'w') as fp:
+                json.dump(data, fp, indent=2)
+        except Exception as e:
+            print(f"Error saving alerts data: {e}")
+
+    def _onalertchanged(self, item):
+        try:
+            cols = [self.alertstable.horizontalHeaderItem(c).text()
+                    for c in range(self.alertstable.columnCount())]
+            if item.column() >= len(cols):
+                return
+            col_name = cols[item.column()]
+            if col_name not in self._ALERT_EDITABLE_COLS:
+                return
+
+            part_idx = cols.index('Part') if 'Part' in cols else -1
+            alert_idx = cols.index('Alerts') if 'Alerts' in cols else -1
+            if part_idx < 0 or alert_idx < 0:
+                return
+            part_item = self.alertstable.item(item.row(), part_idx)
+            alert_item = self.alertstable.item(item.row(), alert_idx)
+            if not part_item or not alert_item:
+                return
+            key = part_item.text() + '|' + alert_item.text()
+
+            if self._alerts_cache is None:
+                self._alerts_cache = self._loadalertsdata()
+
+            if key not in self._alerts_cache:
+                self._alerts_cache[key] = {}
+            val = item.text().strip()
+            if val:
+                self._alerts_cache[key][col_name] = val
+            else:
+                self._alerts_cache[key].pop(col_name, None)
+                if not self._alerts_cache[key]:
+                    del self._alerts_cache[key]
+
+            self._savealertsdata(self._alerts_cache)
+        except Exception as e:
+            print(f"Error saving alert change: {e}")
+
+    # ------------------------------------------------------------------ #
+    #  PIWD persistence                                                    #
+    # ------------------------------------------------------------------ #
+
+    def _piwdfile(self):
+        return getsharednetworkpath() / "piwddata.json"
+
+    def _loadpiwddata(self):
+        f = self._piwdfile()
+        if f.exists():
+            try:
+                with open(f, 'r') as fp:
+                    return json.load(fp)
+            except Exception as e:
+                print(f"Error loading PIWD data: {e}")
+        return {}
+
+    def _savepiwddata(self, data: dict):
+        f = self._piwdfile()
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            with open(f, 'w') as fp:
+                json.dump(data, fp, indent=2)
+        except Exception as e:
+            print(f"Error saving PIWD data: {e}")
+
+    def _onpiwdchanged(self, item):
+        try:
+            cols = [self.piwdtable.horizontalHeaderItem(c).text()
+                    for c in range(self.piwdtable.columnCount())]
+            if item.column() >= len(cols):
+                return
+            col_name = cols[item.column()]
+            if col_name not in self._PIWD_EDITABLE_COLS:
+                return
+
+            part_idx = cols.index('Part') if 'Part' in cols else -1
+            if part_idx < 0:
+                return
+            part_item = self.piwdtable.item(item.row(), part_idx)
+            if not part_item:
+                return
+            key = part_item.text()
+
+            if self._piwd_cache is None:
+                self._piwd_cache = self._loadpiwddata()
+
+            if key not in self._piwd_cache:
+                self._piwd_cache[key] = {}
+            val = item.text().strip()
+            if val:
+                self._piwd_cache[key][col_name] = val
+            else:
+                self._piwd_cache[key].pop(col_name, None)
+                if not self._piwd_cache[key]:
+                    del self._piwd_cache[key]
+
+            self._savepiwddata(self._piwd_cache)
+        except Exception as e:
+            print(f"Error saving PIWD change: {e}")
+
     def displaytransactiontable(self, transactiondata):
         if not transactiondata:
             return
@@ -1593,11 +1720,21 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
             for col in self._ALERT_EDITABLE_COLS:
                 displaydf[col] = ''
- 
+
+            # Load previously saved editable values from shared drive
+            saved = self._loadalertsdata()
+            if saved and 'Part' in displaydf.columns and 'Alerts' in displaydf.columns:
+                for idx, row in displaydf.iterrows():
+                    key = str(row['Part']) + '|' + str(row['Alerts'])
+                    if key in saved:
+                        for col, val in saved[key].items():
+                            if col in displaydf.columns:
+                                displaydf.at[idx, col] = val
+
             self.originalalertsdf = displaydf.copy()
             self.populatealertfilters(displaydf)
             self.displayalertstable(displaydf)
- 
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Alerts analysis failed: {str(e)}")
             
@@ -1638,11 +1775,21 @@ class SupplyChainCoordinationWindow(QMainWindow):
             
             for col in self._PIWD_EDITABLE_COLS:
                 displaydf[col] = ''
-                
+
+            # Load previously saved editable values from shared drive
+            saved = self._loadpiwddata()
+            if saved and 'Part' in displaydf.columns:
+                for idx, row in displaydf.iterrows():
+                    key = str(row['Part'])
+                    if key in saved:
+                        for col, val in saved[key].items():
+                            if col in displaydf.columns:
+                                displaydf.at[idx, col] = val
+
             self.originalpiwddf = displaydf.copy()
             self.populatepiwdfilters(displaydf)
             self.displaypiwdtable(displaydf)
-            
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"PIWD Report failed: {str(e)}")
  
@@ -1753,7 +1900,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.alertstable.setUpdatesEnabled(True)
             self.alertstable.resizeColumnsToContents()
             self.alertstable.setSortingEnabled(True)
- 
+            self.alertstable.itemChanged.connect(self._onalertchanged)
+
     def exportalertstable(self):
         if not hasattr(self, 'originalalertsdf') or self.originalalertsdf.empty:
             QMessageBox.warning(self, "No Data", "Generate alerts breakdown first.")
@@ -1807,7 +1955,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.piwdtable.setUpdatesEnabled(True)
             self.piwdtable.resizeColumnsToContents()
             self.piwdtable.setSortingEnabled(True)
-                  
+            self.piwdtable.itemChanged.connect(self._onpiwdchanged)
+
     def exportpiwdreport(self):
         if not hasattr(self, 'originalpiwddf') or self.originalpiwddf.empty:
             QMessageBox.warning(self, "No Data", "Generate PIWD report first.")
