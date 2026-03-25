@@ -59,3 +59,7 @@ class LocalAuth:
     def deleteuser(self):
         if self.configfile.exists():
             self.configfile.unlink()
+        
+    def deleteuser(self):
+        if self.configfile.exists():
+            self.configfile.unlink()
