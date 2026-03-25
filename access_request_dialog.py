@@ -24,21 +24,21 @@ class AccessRequestDialog(QDialog):
         header.setStyleSheet("background-color: #156082;")
         headerlayout = QVBoxLayout(header)
         headerlayout.setContentsMargins(0, 4, 0, 4)
-
+ 
         title = QLabel("Request Access to Applications")
         title.setFont(QFont("Arial", 14, QFont.Bold))
         title.setStyleSheet("background-color: transparent; color: white")
         title.setAlignment(Qt.AlignCenter)
         headerlayout.addWidget(title)
-
-        instructions = QLabel("Select the applications you need to access to. \n"
-                              "An administrator will review and approve your request. Reach out to Jack Nolen for escalation.")
+ 
+        instructions = QLabel("Select the applications you need to access to. \n" "An administrator will review and approve your request. Reach out to Jack Nolen for escalation.")
         instructions.setWordWrap(True)
         instructions.setStyleSheet("background-color: transparent; color: white")
         instructions.setAlignment(Qt.AlignCenter)
         headerlayout.addWidget(instructions)
-
+ 
         layout.addWidget(header)
+        
         layout.addSpacing(20)
         
         scroll = QScrollArea()
@@ -83,11 +83,13 @@ class AccessRequestDialog(QDialog):
         buttonlayout = QVBoxLayout()
         submitbtn = QPushButton("Submit Request")
         submitbtn.clicked.connect(self.handlesubmit)
+        submitbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #a2d8f0; color: grey;}""")
         submitbtn.setDefault(True)
         buttonlayout.addWidget(submitbtn)
         
         cancelbtn = QPushButton("Cancel")
         cancelbtn.clicked.connect(self.reject)
+        cancelbtn.setStyleSheet("""QPushButton {background-color: #d0d0d0; color: black; padding: 8px 15px;} QPushButton:hover {background-color: #800000; color: white}""")
         buttonlayout.addWidget(cancelbtn)
         
         layout.addLayout(buttonlayout)
