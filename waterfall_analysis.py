@@ -1,13 +1,13 @@
 import pandas as pd
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 
 class WaterfallAnalysisEngine:
     def __init__(self, import_manager):
         self.import_manager = import_manager
-        self.archive_dir = self.import_manager.importsdir.parent / "historical_data"
+        self.archive_dir = self.import_manager.importsdir / "goods_to_be_departed"
         
     def generatecalloffwaterfall(self, partnumber: str, daysback: int = 90) -> List[Dict]:
         if not self.archive_dir.exists():
@@ -16,7 +16,7 @@ class WaterfallAnalysisEngine:
         waterfalldata = []
         today = datetime.now().date()
         
-        for daysbackoffset in range(daysback):
+        for daysbackoffset in range(daysback - 1, -1, -1):
             archivedate = today - timedelta(days=daysbackoffset)
             
             if archivedate.weekday() >= 5 and daysbackoffset > 7:
@@ -25,10 +25,6 @@ class WaterfallAnalysisEngine:
             gtbddata = self.loadgtbdarchive(archivedate)
             
             if gtbddata is None:
-                waterfalldata.append({
-                    'archive_date': archivedate,
-                    'call_offs': {},
-                    'file_found': False})
                 continue
             
             calloffs = self.processpartcalloffs(gtbddata, partnumber)
@@ -40,19 +36,29 @@ class WaterfallAnalysisEngine:
             
         return waterfalldata
     
-    def loadgtbdarchive(self, date: datetime.date) -> Optional[pd.DataFrame]: 
-        datestr = date.strftime("%-m.%-d.%y") if os.name != 'nt' else date.strftime("%#m.%#d.%y")
-        expectedfilename = f"GTBD {datestr}.csv"
-        filepath = self.archive_dir / expectedfilename
-       
-        if not filepath.exists():
-            return None
-        try:
-            gtbddf = pd.read_csv(filepath)
-            requiredcols = ['PART_NO', 'CALL_OFF_QUANTITY', 'EARLIEST_SHIPPING_TIME']
-            missingcols = [col for col in requiredcols if col not in gtbddf.columns]
+    def loadgtbdarchive(self, date: date) -> Optional[pd.DataFrame]: 
+        dateprefix = f"GTBD {date.month}.{date.day}.{date.strftime('%y')}"
+        
+        matching = []
+        for ext in ['.csv', '.xlsx', '.xls', '.xlsm']:
+            matching.extend(self.archive_dir.glob(f"*{dateprefix}*{ext}"))
             
-            if missingcols:
+        if not matching:
+            return None
+        
+        filepath = max(matching, key=lambda f: f.stat().st_mtime)
+        
+        try:
+            if filepath.suffix.lower() == '.csv':
+                gtbddf = self.import_manager.loaddata('goods_to_be_departed', filepath.name)
+            else:
+                gtbddf = pd.read_excel(filepath)
+            
+            if gtbddf.empty:
+                return None
+            
+            requiredcols = ['PART_NO', 'CALL_OFF_QUANTITY', 'EARLIEST_SHIPING_TIME']
+            if any(col not in gtbddf.columns for col in requiredcols):
                 return None
             
             return gtbddf
@@ -61,7 +67,7 @@ class WaterfallAnalysisEngine:
             return None
         
     def processpartcalloffs(self, gtbddf: pd.DataFrame, partnumber: str) -> Dict:
-        partdata = gtbddf[gtbddf['PART_NO'].astype(str).upper() == partnumber.upper()]
+        partdata = gtbddf[gtbddf['PART_NO'].astype(str).str.strip().str.upper() == partnumber.upper()]
         
         if partdata.empty:
             return {}
@@ -70,10 +76,10 @@ class WaterfallAnalysisEngine:
         
         for _, row in partdata.iterrows():
             try:
-                if pd.isna(row['EARLIEST_SHIPPING_TIME']):
+                if pd.isna(row['EARLIEST_SHIPING_TIME']):
                     continue
                 
-                shippingdate = pd.to_datetime(row['EARLIEST_SHIPPING_TIME']).date()
+                shippingdate = pd.to_datetime(row['EARLIEST_SHIPING_TIME']).date()
                 quantity = float(row['CALL_OFF_QUANTITY']) if pd.notna(row['CALL_OFF_QUANTITY']) else 0
                 
                 if quantity <= 0:
@@ -88,7 +94,7 @@ class WaterfallAnalysisEngine:
         
         return calloffs
     
-    def generateshippingdaterange(self, startdate: datetime.date, daysforward: int = 90) -> List[datetime.date]:
+    def generateshippingdaterange(self, startdate: datetime.date, daysforward: int = 90) -> List[date]:
         shippingdates = []
         
         for daysoffset in range(daysforward):
@@ -97,7 +103,7 @@ class WaterfallAnalysisEngine:
             
         return shippingdates
     
-    def validatearchiveavailability(self) -> Tuple[bool, str, List[datetime.date]]:
+    def validatearchiveavailability(self) -> Tuple[bool, str, List[date]]:
         if not self.archive_dir.exists():
             return False, f"Archive directory not found: {self.archive_dir}", []
         
@@ -106,11 +112,9 @@ class WaterfallAnalysisEngine:
         
         for daysback in range(30):
             checkdate = today - timedelta(days=daysback)
-            datestr = checkdate.strftime("%-m.%-d.%y") if os.name != 'nt' else checkdate.strtime("%#m.%#d.%y")
-            expectedfilename = f"GTBD {datestr}.csv"
-            filepath = self.archive_dir / expectedfilename
-            
-            if filepath.exists():
+            dateprefix = f"GTBD {checkdate.month}.{checkdate.day}.{checkdate.strftime('%y')}"
+            matches = list(self.archive_dir.glob(f"*{dateprefix}*"))
+            if matches:
                 availabledates.append(checkdate)
                 
         if not availabledates:
