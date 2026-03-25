@@ -1721,15 +1721,27 @@ class SupplyChainCoordinationWindow(QMainWindow):
             for col in self._ALERT_EDITABLE_COLS:
                 displaydf[col] = ''
 
-            # Load previously saved editable values from shared drive
+            # Load previously saved editable values from shared drive, pruning
+            # any entries whose Part|Alert key is no longer in the current report
             saved = self._loadalertsdata()
-            if saved and 'Part' in displaydf.columns and 'Alerts' in displaydf.columns:
-                for idx, row in displaydf.iterrows():
-                    key = str(row['Part']) + '|' + str(row['Alerts'])
-                    if key in saved:
-                        for col, val in saved[key].items():
-                            if col in displaydf.columns:
-                                displaydf.at[idx, col] = val
+            if 'Part' in displaydf.columns and 'Alerts' in displaydf.columns:
+                current_keys = {
+                    str(r['Part']) + '|' + str(r['Alerts'])
+                    for _, r in displaydf.iterrows()
+                }
+                if saved:
+                    stale = [k for k in saved if k not in current_keys]
+                    for k in stale:
+                        del saved[k]
+                    if stale:
+                        self._alerts_cache = saved
+                        self._savealertsdata(saved)
+                    for idx, row in displaydf.iterrows():
+                        key = str(row['Part']) + '|' + str(row['Alerts'])
+                        if key in saved:
+                            for col, val in saved[key].items():
+                                if col in displaydf.columns:
+                                    displaydf.at[idx, col] = val
 
             self.originalalertsdf = displaydf.copy()
             self.populatealertfilters(displaydf)
@@ -1776,15 +1788,24 @@ class SupplyChainCoordinationWindow(QMainWindow):
             for col in self._PIWD_EDITABLE_COLS:
                 displaydf[col] = ''
 
-            # Load previously saved editable values from shared drive
+            # Load previously saved editable values from shared drive, pruning
+            # any entries whose Part key is no longer in the current report
             saved = self._loadpiwddata()
-            if saved and 'Part' in displaydf.columns:
-                for idx, row in displaydf.iterrows():
-                    key = str(row['Part'])
-                    if key in saved:
-                        for col, val in saved[key].items():
-                            if col in displaydf.columns:
-                                displaydf.at[idx, col] = val
+            if 'Part' in displaydf.columns:
+                current_keys = {str(r['Part']) for _, r in displaydf.iterrows()}
+                if saved:
+                    stale = [k for k in saved if k not in current_keys]
+                    for k in stale:
+                        del saved[k]
+                    if stale:
+                        self._piwd_cache = saved
+                        self._savepiwddata(saved)
+                    for idx, row in displaydf.iterrows():
+                        key = str(row['Part'])
+                        if key in saved:
+                            for col, val in saved[key].items():
+                                if col in displaydf.columns:
+                                    displaydf.at[idx, col] = val
 
             self.originalpiwddf = displaydf.copy()
             self.populatepiwdfilters(displaydf)
