@@ -43,9 +43,15 @@ class DataImportManager:
                 "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
                 "archive": False},
             "goods_to_be_received": {
-                "name": "Goods to be Received Next 365 Days",
+                "name": "Goods to be Received",
                 "description": "Goods to be received by part per day for the next 365 days",
                 "requiredcolumns": ["ARTNR", "ARTAN", "FRAKT_TID_TIDIGAST", "FRAKT_TID_SENAST", "ANK_TID_TIDIGAST", "ANK_TID_SENAST"],
+                "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
+                "archive": False},
+            "splunk_receiving_data": {
+                "name": "Splunk Receiving Data",
+                "description": "Goods to be received by part per day for the next 60 days",
+                "requiredcolumns": ['TO Number', 'Load Delivery Date Original TO', 'Load Delivery Date Final', 'Part Number', 'Quantity'],
                 "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
                 "archive": False},
             "manual_TTT": {
@@ -54,78 +60,20 @@ class DataImportManager:
                 "requiredcolumns": ["FRAKTDAG", "LEVNR"],
                 "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
                 "archive": False},
-            "pva_percentage": {
-                "name": "PVA Percentage",
-                "description": "Plant Volume Adjustment percentage distribution (SPA2 YTD)",
-                "requiredcolumns": ["PVA.Percentage", "Frequency"],
+            "goods_to_be_departed": {
+                "name": "Goods to be Departed",
+                "description": "Goods to be departed by part per day for the next 90 days",
+                "requiredcolumns": ['PART_NO', 'CALL_OFF_QUANTITY', 'EARLIEST_SHIPING_TIME'],
+                "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
+                "archive": True},
+            "alert_report": {
+                "name": "Alert Report",
+                "description": "Alert Report",
+                "requiredcolumns": ['PART', 'PART_DESCRIPTION', 'CURRENT_INVENTORY', 'ON_YARD_INVENTORY', 'CURRENT_REQUIREMENT', 'ASN_INTRANSIT', 'SUPPLIER_NAME', 'SUPPLIER_COUNTRY', 'SCC_NAME', 'ALERT_TYPE', 'ALERT_DETAILS'],
                 "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
                 "archive": False}
             }
         self.ensuredirectories()
-        self.odbcconfigpath = SHAREDNETWORKPATH / "odbc_config.json"
-        self.odbcconfig = self._loadodbcconfig()
-
-    def _loadodbcconfig(self) -> Dict:
-        if self.odbcconfigpath.exists():
-            try:
-                with open(self.odbcconfigpath, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"Could not load ODBC config: {e}")
-        return {}
-
-    def _saveodbcconfig(self):
-        try:
-            with open(self.odbcconfigpath, 'w') as f:
-                json.dump(self.odbcconfig, f, indent=2)
-        except Exception as e:
-            print(f"Failed to save ODBC config: {e}")
-
-    def getodbcconfig(self) -> Dict:
-        return self.odbcconfig.copy()
-
-    def setodbcconfig(self, category: str, connection_string: str, query: str, enabled: bool = True):
-        self.odbcconfig[category] = {
-            "enabled": enabled,
-            "connection_string": connection_string,
-            "query": query
-        }
-        self._saveodbcconfig()
-
-    def removeodbcconfig(self, category: str):
-        self.odbcconfig.pop(category, None)
-        self._saveodbcconfig()
-
-    def loadviaodbic(self, category: str) -> pd.DataFrame:
-        config = self.odbcconfig.get(category, {})
-        if not config.get("enabled"):
-            return pd.DataFrame()
-        try:
-            import pyodbc
-            conn = pyodbc.connect(config["connection_string"])
-            df = pd.read_sql(config["query"], conn)
-            conn.close()
-            print(f"[ODBC] Loaded {len(df)} rows for '{category}'")
-            return df
-        except ImportError:
-            print("[ODBC] pyodbc is not installed. Run: pip install pyodbc")
-            return pd.DataFrame()
-        except Exception as e:
-            print(f"[ODBC] Load failed for '{category}': {e}")
-            return pd.DataFrame()
-
-    def testodbcconnection(self, connection_string: str, query: str) -> Tuple[bool, str, pd.DataFrame]:
-        try:
-            import pyodbc
-        except ImportError:
-            return False, "pyodbc is not installed. Run: pip install pyodbc", pd.DataFrame()
-        try:
-            conn = pyodbc.connect(connection_string, timeout=10)
-            df = pd.read_sql(query, conn)
-            conn.close()
-            return True, f"Success — {len(df):,} rows returned.", df.head(5)
-        except Exception as e:
-            return False, str(e), pd.DataFrame()
     
     def ensuredirectories(self):
         for category in self.importcategories.keys():
@@ -267,12 +215,6 @@ class DataImportManager:
         return max(datafiles, key=lambda f: f.stat().st_mtime)
     
     def loaddata(self, category: str, filename: Optional[str] = None) -> pd.DataFrame:
-        if filename is None and self.odbcconfig.get(category, {}).get("enabled"):
-            result = self.loadviaodbic(category)
-            if not result.empty:
-                return result
-            print(f"[ODBC] Falling back to file for '{category}'")
-
         if filename:
             filepath = self.importsdir / category / filename
         else:
