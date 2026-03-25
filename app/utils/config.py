@@ -61,7 +61,7 @@ AVAILABLEAPPS = {
         "module": "running_change"}
     }
 
-ADMINUSERS = ["jnolen"]
+ADMINUSERS = ["jnolen", "jmccaslin"]
 
 POWERUSERS = {
     "jnolen2": ["master_data", "current_inventory_report"]
