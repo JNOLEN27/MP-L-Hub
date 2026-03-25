@@ -9,7 +9,6 @@ from app.data.import_manager import DataImportManager
 from app.supply_chain_coordination.coverage_analysis import CoverageAnalysisEngine
 from app.supply_chain_coordination.waterfall_analysis import WaterfallAnalysisEngine
 from app.supply_chain_coordination.ldjis_coverage import LDJISCoverageEngine
-from app.supply_chain_coordination.odbc_config_dialog import ODBCConfigDialog
  
  
 class SupplyChainCoordinationWindow(QMainWindow):
@@ -351,7 +350,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         return SimpleMultiSelectFilter(placeholdertext, filtertype)
  
-    def createsearchfilter(self, filtertype="MFG", columnname="SUPP_MFG", onchange=None):
+    def createsearchfilter(self, filtertype="MFG", columnname="SUPP_MFG"):
         widget = QWidget()
         widget.setFixedHeight(120)
         widget.setFixedWidth(180)
@@ -372,12 +371,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         btnlayout = QHBoxLayout()
         btnlayout.setSpacing(2)
  
-        callback = onchange if onchange is not None else self.applyfilters
- 
         searchbtn = QPushButton("✓")
         searchbtn.setMaximumHeight(22)
         searchbtn.setMaximumWidth(25)
-        searchbtn.clicked.connect(callback)
+        searchbtn.clicked.connect(self.applyfilters)
         searchbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; border: none; padding: 2px; border-radius: 3px;} QPushButton:hover {background-color: #45a049;}""")
         btnlayout.addWidget(searchbtn)
  
@@ -399,13 +396,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         layout.addStretch()
  
-        searchinput.returnPressed.connect(callback)
+        searchinput.returnPressed.connect(self.applyfilters)
  
         widget.searchinput = searchinput
         widget.statuslabel = statuslabel
         widget.filtertype = filtertype
         widget.columnname = columnname
-        widget.callback = callback
  
         widget.setLayout(layout)
         return widget
@@ -413,7 +409,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
     def clearsearchfilter(self, searchwidget):
         searchwidget.searchinput.clear()
         searchwidget.statuslabel.setText("")
-        searchwidget.callback()
+        self.applyfilters()
  
     def populatefilters(self, coveragedf):
         if 'SCC Name' in coveragedf.columns:
@@ -553,11 +549,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
         exportbtn = QPushButton("Export to CSV")
         exportbtn.clicked.connect(self.exportcoveragetable)
         buttonlayout.addWidget(exportbtn)
- 
-        odbcbtn = QPushButton("ODBC Settings")
-        odbcbtn.clicked.connect(self.openodbcsettings)
-        odbcbtn.setStyleSheet("QPushButton {padding: 6px 14px; border: 1px solid #156082; color: #156082; border-radius: 4px;} QPushButton:hover {background-color: #e8f0fe;}")
-        buttonlayout.addWidget(odbcbtn)
  
         buttonlayout.addStretch()
         layout.addLayout(buttonlayout)
@@ -1698,8 +1689,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.displayalertstable(self.originalalertsdf)
             
     def populatepiwdfilters(self, piwddf):
-        if 'SCC' in piwddf.columns:
-            self.piwd_scc_filter.additems(piwddf['SCC'].dropna().unique())
+        if 'SCC Name' in piwddf.columns:
+            self.piwd_scc_filter.additems(piwddf['SCC Name'].dropna().unique())
         
         if 'Part' in piwddf.columns:
             self.piwd_part_filter.additems(piwddf['Part'].dropna().unique())
@@ -1711,26 +1702,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
         filtereddf = self.originalpiwddf.copy()
         
         selected_scc = self.piwd_scc_filter.getselecteditems()
-        if selected_scc and 'SCC' in filtereddf.columns:
-            filtereddf = filtereddf[filtereddf['SCC'].isin(selected_scc)]
+        if selected_scc and 'SCC Name' in filtereddf.columns:
+            filtereddf = filtereddf[filtereddf['SCC Name'].isin(selected_scc)]
             
         selected_part = self.piwd_part_filter.getselecteditems()
         if selected_part and 'Part' in filtereddf.columns:
             filtereddf = filtereddf[filtereddf['Part'].isin(selected_part)]
- 
-        if hasattr(self, 'piwd_part_search') and 'Part' in filtereddf.columns:
-            searchtext = self.piwd_part_search.searchinput.text().strip().upper()
-            if searchtext:
-                if ',' in searchtext:
-                    codes = [c.strip() for c in searchtext.split(',') if c.strip()]
-                    filtereddf = filtereddf[filtereddf['Part'].astype(str).str.upper().isin(codes)]
-                    self.piwd_part_search.statuslabel.setText(f"Searching: {', '.join(codes)}")
-                else:
-                    filtereddf = filtereddf[filtereddf['Part'].astype(str).str.upper().str.contains(searchtext, na=False)]
-                    self.piwd_part_search.statuslabel.setText(f"Searching: {searchtext}")
-            else:
-                self.piwd_part_search.statuslabel.setText("")
- 
+            
         self.displaypiwdtable(filtereddf)
         
     def clearpiwdfilters(self):
@@ -1738,9 +1716,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.piwd_scc_filter.selectallitems()
         if hasattr(self, 'piwd_part_filter'):
             self.piwd_part_filter.selectallitems()
-        if hasattr(self, 'piwd_part_search'):
-            self.piwd_part_search.searchinput.clear()
-            self.piwd_part_search.statuslabel.setText("")
  
     def displayalertstable(self, alertdf: pd.DataFrame):
         if alertdf.empty:
@@ -1763,7 +1738,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             for row in range(n_rows):
                 for col in range(n_cols):
                     value = data[row, col]
-                    display_value = (str(value) if value is not None and not (isinstance(value, float) and value != value) else '')
+                    display_value = str(value) if value is not None and not (isinstance(value, float) and value != value) else ''
  
                     item = QTableWidgetItem(display_value)
                     if col in editable_indices:
@@ -1852,10 +1827,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def refreshcoveragedata(self):
         self.generatecoverageanalysis()
-
-    def openodbcsettings(self):
-        dialog = ODBCConfigDialog(self.import_manager, self)
-        dialog.exec_()
  
     def exportcoveragetable(self):
         if not hasattr(self, 'currentcoveragedf') or self.currentcoveragedf.empty:
