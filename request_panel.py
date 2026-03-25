@@ -19,13 +19,22 @@ class AdminWindow(QMainWindow):
         centralwidget = QWidget()
         self.setCentralWidget(centralwidget)
         layout = QVBoxLayout()
+        header = QWidget()
+        header.setStyleSheet("background-color: #156082;")
+        headerlayout = QVBoxLayout(header)
+        headerlayout.setContentsMargins(4, 4, 0, 4)
+        
+        
         title = QLabel("Pending Access Requests")
         title.setFont(QFont("Arial", 16, QFont.Bold))
-        title.setStyleSheet(f"color: {COLORPRIMARY};")
-        layout.addWidget(title)
+        title.setStyleSheet("color: white; background-color: transparent;")
+        headerlayout.addWidget(title)
         
         instructions = QLabel("Review and approve or deny user access requests. \n""Select a request and click Approve or Deny.")
-        layout.addWidget(instructions)
+        instructions.setStyleSheet("color: white; background-color: transparent;")
+        headerlayout.addWidget(instructions)
+        
+        layout.addWidget(header)
         layout.addSpacing(10)
         
         self.table = QTableWidget()
@@ -40,22 +49,24 @@ class AdminWindow(QMainWindow):
         buttonlayout = QHBoxLayout()
         self.approvebtn = QPushButton("Approve")
         self.approvebtn.clicked.connect(self.approveselected)
-        self.approvebtn.setStyleSheet(f"""QPushButton {{background-color: #45a049; color: white; padding: 8px 15px; font-weight: bold;}} QPushButton:hover {{background-color: {COLORSUCCESS}}}""")
+        self.approvebtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #a2d8f0; color: grey;}""")
         buttonlayout.addWidget(self.approvebtn)
         
         self.denybtn = QPushButton("Deny")
         self.denybtn.clicked.connect(self.denyselected)
-        self.denybtn.setStyleSheet(f""""QPushButton {{background-color: {COLORERROR}; color: white; padding 8px 15px; font-weight: bold;}} QPushButton: hover {{background-color: #da190b;}}""")
+        self.denybtn.setStyleSheet("""QPushButton {background-color: #800000; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #ffb3b3; color: grey;}""")
         buttonlayout.addWidget(self.denybtn)
         
         buttonlayout.addStretch()
         
         refreshbtn = QPushButton("Refresh")
         refreshbtn.clicked.connect(self.loadrequests)
+        refreshbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #a2d8f0; color: grey;}""")
         buttonlayout.addWidget(refreshbtn)
         
         closebtn = QPushButton("Close")
         closebtn.clicked.connect(self.close)
+        closebtn.setStyleSheet("""QPushButton {background-color: #d0d0d0; color: black; padding: 8px 15px;} QPushButton:hover {background-color: #800000; color: white}""")
         buttonlayout.addWidget(closebtn)
         
         layout.addLayout(buttonlayout)
