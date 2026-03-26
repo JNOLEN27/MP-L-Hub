@@ -71,6 +71,12 @@ class DataImportManager:
                 "description": "Alert Report",
                 "requiredcolumns": ['PART', 'PART_DESCRIPTION', 'CURRENT_INVENTORY', 'ON_YARD_INVENTORY', 'CURRENT_REQUIREMENT', 'ASN_INTRANSIT', 'SUPPLIER_NAME', 'SUPPLIER_COUNTRY', 'SCC_NAME', 'ALERT_TYPE', 'ALERT_DETAILS'],
                 "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
+                "archive": False},
+            "part_matrix": {
+                "name": "Part Matrix",
+                "description": "Part Matrix with Program Support data",
+                "requiredcolumns": ["Part No", "Type 110 (V536)", "Type 100 (P519)"],
+                "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
                 "archive": False}
             }
         self.ensuredirectories()

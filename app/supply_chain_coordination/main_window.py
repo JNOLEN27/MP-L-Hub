@@ -137,6 +137,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.dayalertfilter = self.createmultiselectdropdown("Select Day Alert...", "Day Alert")
         self.dayalertfilter.selectionChanged.connect(self.applyfilters)
         layout.addWidget(self.dayalertfilter)
+
+        self.programsupportedfilter = self.createmultiselectdropdown("Select Program...", "Program")
+        self.programsupportedfilter.selectionChanged.connect(self.applyfilters)
+        layout.addWidget(self.programsupportedfilter)
  
         searchgridwidget = QWidget()
         searchgridlayout = QGridLayout(searchgridwidget)
@@ -202,6 +206,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.alerts_country_filter = self.createmultiselectdropdown("Select Country...", "Country")
         self.alerts_country_filter.selectionChanged.connect(self.applyalertfilters)
         layout.addWidget(self.alerts_country_filter)
+
+        self.alerts_program_filter = self.createmultiselectdropdown("Select Program...", "Program")
+        self.alerts_program_filter.selectionChanged.connect(self.applyalertfilters)
+        layout.addWidget(self.alerts_program_filter)
 
         clearfiltersbtn = QPushButton("Clear All Filters")
         clearfiltersbtn.clicked.connect(self.clearalertfilters)
@@ -431,6 +439,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
             uniqueregions = coveragedf['Region'].dropna().unique()
             self.regionfilter.additems(uniqueregions)
  
+        if 'Program Supported' in coveragedf.columns:
+            uniqueprograms = coveragedf['Program Supported'].dropna().unique()
+            self.programsupportedfilter.additems(uniqueprograms)
+
         if 'Day Alert' in coveragedf.columns:
             uniqueday = coveragedf['Day Alert'].dropna().unique()
             validdays = []
@@ -468,6 +480,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
             if selectedregion and 'Region' in filtereddf.columns:
                 filtereddf = filtereddf[filtereddf['Region'].isin(selectedregion)]
  
+            selectedprograms = self.programsupportedfilter.getselecteditems()
+            if selectedprograms and 'Program Supported' in filtereddf.columns:
+                filtereddf = filtereddf[filtereddf['Program Supported'].isin(selectedprograms)]
+
             selecteddays = self.dayalertfilter.getselecteditems()
             if selecteddays and 'Day Alert' in filtereddf.columns:
                 dayvalues = []
@@ -529,6 +545,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.regionfilter.selectallitems()
         if hasattr(self, 'dayalertfilter'):
             self.dayalertfilter.selectallitems()
+        if hasattr(self, 'programsupportedfilter'):
+            self.programsupportedfilter.selectallitems()
         if hasattr(self, 'searchfilters'):
             for searchfilter in self.searchfilters:
                 searchfilter.searchinput.clear()
@@ -1835,6 +1853,35 @@ class SupplyChainCoordinationWindow(QMainWindow):
                                 if col in displaydf.columns:
                                     displaydf.at[idx, col] = val
 
+            # Merge Program Supported from part_matrix
+            try:
+                partmatrix = self.import_manager.loaddata('part_matrix')
+                if not partmatrix.empty and 'Part No' in partmatrix.columns:
+                    v536_col = 'Type 110 (V536)'
+                    p519_col = 'Type 100 (P519)'
+                    def _classify_program(row):
+                        has_v536 = v536_col in row.index and str(row[v536_col]).strip().upper() == 'X'
+                        has_p519 = p519_col in row.index and str(row[p519_col]).strip().upper() == 'X'
+                        if has_v536 and has_p519:
+                            return 'Common'
+                        elif has_v536:
+                            return 'V536'
+                        elif has_p519:
+                            return 'P519'
+                        return ''
+                    pm = partmatrix.copy()
+                    pm['_program'] = pm.apply(_classify_program, axis=1)
+                    pm['_part_key'] = pm['Part No'].astype(str).str.strip().str.upper()
+                    lookup = pm.set_index('_part_key')['_program'].to_dict()
+                    if 'Part' in displaydf.columns:
+                        displaydf['Program Supported'] = (
+                            displaydf['Part'].astype(str).str.strip().str.upper().map(lookup).fillna('')
+                        )
+                else:
+                    displaydf['Program Supported'] = ''
+            except Exception:
+                displaydf['Program Supported'] = ''
+
             self.originalalertsdf = displaydf.copy()
             self.populatealertfilters(displaydf)
             self.displayalertstable(displaydf)
@@ -1923,6 +1970,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if 'Country' in alertdf.columns:
             self.alerts_country_filter.additems(alertdf['Country'].dropna().unique())
 
+        if 'Program Supported' in alertdf.columns:
+            self.alerts_program_filter.additems(alertdf['Program Supported'].dropna().unique())
+
     def applyalertfilters(self):
         if not hasattr(self, 'originalalertsdf'):
             return
@@ -1950,6 +2000,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if selected_countries and 'Country' in filtereddf.columns:
             filtereddf = filtereddf[filtereddf['Country'].isin(selected_countries)]
 
+        selected_programs = self.alerts_program_filter.getselecteditems()
+        if selected_programs and 'Program Supported' in filtereddf.columns:
+            filtereddf = filtereddf[filtereddf['Program Supported'].isin(selected_programs)]
+
         self.displayalertstable(filtereddf)
  
     def clearalertfilters(self):
@@ -1963,6 +2017,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.alerts_region_filter.selectallitems()
         if hasattr(self, 'alerts_country_filter'):
             self.alerts_country_filter.selectallitems()
+        if hasattr(self, 'alerts_program_filter'):
+            self.alerts_program_filter.selectallitems()
         if hasattr(self, 'originalalertsdf'):
             self.displayalertstable(self.originalalertsdf)
             
