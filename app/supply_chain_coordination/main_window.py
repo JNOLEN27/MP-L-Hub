@@ -199,6 +199,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.alerts_region_filter.selectionChanged.connect(self.applyalertfilters)
         layout.addWidget(self.alerts_region_filter)
 
+        self.alerts_country_filter = self.createmultiselectdropdown("Select Country...", "Country")
+        self.alerts_country_filter.selectionChanged.connect(self.applyalertfilters)
+        layout.addWidget(self.alerts_country_filter)
+
         clearfiltersbtn = QPushButton("Clear All Filters")
         clearfiltersbtn.clicked.connect(self.clearalertfilters)
         clearfiltersbtn.setMaximumWidth(120)
@@ -1916,6 +1920,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if 'Region' in alertdf.columns:
             self.alerts_region_filter.additems(alertdf['Region'].dropna().unique())
 
+        if 'Country' in alertdf.columns:
+            self.alerts_country_filter.additems(alertdf['Country'].dropna().unique())
+
     def applyalertfilters(self):
         if not hasattr(self, 'originalalertsdf'):
             return
@@ -1939,6 +1946,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if selected_regions and 'Region' in filtereddf.columns:
             filtereddf = filtereddf[filtereddf['Region'].isin(selected_regions)]
 
+        selected_countries = self.alerts_country_filter.getselecteditems()
+        if selected_countries and 'Country' in filtereddf.columns:
+            filtereddf = filtereddf[filtereddf['Country'].isin(selected_countries)]
+
         self.displayalertstable(filtereddf)
  
     def clearalertfilters(self):
@@ -1950,6 +1961,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.alerts_part_filter.selectallitems()
         if hasattr(self, 'alerts_region_filter'):
             self.alerts_region_filter.selectallitems()
+        if hasattr(self, 'alerts_country_filter'):
+            self.alerts_country_filter.selectallitems()
         if hasattr(self, 'originalalertsdf'):
             self.displayalertstable(self.originalalertsdf)
             
