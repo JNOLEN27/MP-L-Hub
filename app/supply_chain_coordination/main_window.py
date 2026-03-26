@@ -194,7 +194,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.alerts_part_filter = self.createmultiselectdropdown("Select Part-Alert...", "Part-Alert")
         self.alerts_part_filter.selectionChanged.connect(self.applyalertfilters)
         layout.addWidget(self.alerts_part_filter)
- 
+
+        self.alerts_region_filter = self.createmultiselectdropdown("Select Region...", "Region")
+        self.alerts_region_filter.selectionChanged.connect(self.applyalertfilters)
+        layout.addWidget(self.alerts_region_filter)
+
         clearfiltersbtn = QPushButton("Clear All Filters")
         clearfiltersbtn.clicked.connect(self.clearalertfilters)
         clearfiltersbtn.setMaximumWidth(120)
@@ -1908,7 +1912,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if 'Alerts' in alertdf.columns and 'Part' in alertdf.columns:
             identifiers = (alertdf['Alerts'].astype(str) + ' - ' + alertdf['Part'].astype(str)).dropna().unique()
             self.alerts_part_filter.additems(identifiers)
- 
+
+        if 'Region' in alertdf.columns:
+            self.alerts_region_filter.additems(alertdf['Region'].dropna().unique())
+
     def applyalertfilters(self):
         if not hasattr(self, 'originalalertsdf'):
             return
