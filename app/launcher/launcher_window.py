@@ -8,7 +8,7 @@ from app.auth.permissions import PermissionsManager
 from app.launcher.access_request_dialog import AccessRequestDialog
 from app.utils.config import (
     WINDOWTITLE, LAUNCHERWINDOWSIZE, AVAILABLEAPPS, COLORPRIMARY, COLORSUCCESS,
-    ADMINUSERS, POWERUSERS, issharednetworkpathconfigured
+    ADMINUSERS, POWERUSERS
 )
 
 class WrappedButton(QPushButton):
@@ -169,17 +169,6 @@ class LauncherWindow(QMainWindow):
             dataimportbtn.clicked.connect(self.opendataimportpanel)
             dataimportbtn.setStyleSheet("""QPushButton {background-color: #800000; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #ffb3b3; color: grey;}""")
             layout.addWidget(dataimportbtn)
-
-        # Shared drive config — available to all users so everyone can point to the same folder
-        network_configured = issharednetworkpathconfigured()
-        networkbtn = QPushButton("Configure Shared Drive" if network_configured else "! Configure Shared Drive")
-        networkbtn.clicked.connect(self.opennetworkconfig)
-        net_color = "#156082" if network_configured else "#b05000"
-        networkbtn.setStyleSheet(
-            f"QPushButton {{background-color: {net_color}; color: white; padding: 8px 15px;}}"
-            "QPushButton:hover {background-color: #a2d8f0; color: grey;}"
-        )
-        layout.addWidget(networkbtn)
 
         layout.addStretch()
         

@@ -105,6 +105,10 @@ class DataImportsWindow(QMainWindow):
              "description": "Alert Report",
              "category": "alert_report",
              "filetypes": "Excel files (*.xlsx *.xls *.xlsm);;CSV files (*.csv)"},
+            {"title": "Part Matrix",
+             "description": "Part Matrix",
+             "category": "part_matrix",
+             "filetypes": "Excel files (*.xlsx *.xls *.xlsm);;CSV files (*.csv)"}
             ]
         
         row = 0

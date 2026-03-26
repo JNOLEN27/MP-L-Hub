@@ -21,43 +21,7 @@ NETWORKCONFIGFILE = LOCALAPPDATA / "network_config.json"
 
 
 def getsharednetworkpath() -> Path:
-    """Return the configured shared network path, falling back to local data/."""
-    if NETWORKCONFIGFILE.exists():
-        try:
-            with open(NETWORKCONFIGFILE, 'r') as f:
-                data = json.load(f)
-            configured = data.get('shared_network_path', '').strip()
-            if configured:
-                p = Path(configured)
-                if p.exists():
-                    return p
-        except Exception:
-            pass
-    return BASEDIR / "data"
-
-
-def setsharednetworkpath(path: str) -> bool:
-    """Persist a new shared network path to the local network config file."""
-    try:
-        NETWORKCONFIGFILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(NETWORKCONFIGFILE, 'w') as f:
-            json.dump({'shared_network_path': str(path)}, f, indent=2)
-        return True
-    except Exception:
-        return False
-
-
-def issharednetworkpathconfigured() -> bool:
-    """Return True if a valid shared network path has been saved."""
-    if not NETWORKCONFIGFILE.exists():
-        return False
-    try:
-        with open(NETWORKCONFIGFILE, 'r') as f:
-            data = json.load(f)
-        configured = data.get('shared_network_path', '').strip()
-        return bool(configured) and Path(configured).exists()
-    except Exception:
-        return False
+    return Path(r"W:\_US Operations\P&M Americas\21200 Supplier Quality & Logistics\21220 Material Planning & Logistic\12 MP&L Hub\Data")
 
 
 SHAREDNETWORKPATH = getsharednetworkpath()
@@ -97,7 +61,7 @@ AVAILABLEAPPS = {
         "module": "running_change"}
     }
 
-ADMINUSERS = ["jnolen"]
+ADMINUSERS = ["jnolen", "jmccaslin"]
 
 POWERUSERS = {
     "jnolen2": ["master_data", "current_inventory_report"]
