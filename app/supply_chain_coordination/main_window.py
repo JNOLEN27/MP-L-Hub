@@ -1791,10 +1791,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         'CURRENT_INVENTORY':   'Inv',
         'ON_YARD_INVENTORY':   'Yard',
         'CURRENT_REQUIREMENT': 'Req',
+        'SUPPLIER_COUNTRY':    'Country',
         'SUPPLIER_NAME':       'Supplier',
-        'SUPPLY_SHP_COUNTRY':  'Country',
         'SCC_NAME':            'SCC',
-        'REGION':              'Region',
         }
  
     _ALERT_EDITABLE_COLS = [
@@ -1853,6 +1852,14 @@ class SupplyChainCoordinationWindow(QMainWindow):
                                 if col in displaydf.columns:
                                     displaydf.at[idx, col] = val
 
+            # Compute Region from Country
+            if 'Country' in displaydf.columns:
+                displaydf['Region'] = displaydf['Country'].apply(
+                    self.coverageengine.determineregion
+                )
+            else:
+                displaydf['Region'] = ''
+
             # Merge Program Supported from part_matrix
             try:
                 partmatrix = self.import_manager.loaddata('part_matrix')
@@ -1881,6 +1888,15 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     displaydf['Program Supported'] = ''
             except Exception:
                 displaydf['Program Supported'] = ''
+
+            # Reorder columns: Country/Region/Program Supported after Req, before Supplier
+            preferred_order = [
+                'Alerts', 'Part', 'Part Description', 'Inv', 'Yard', 'Req',
+                'Country', 'Region', 'Program Supported', 'Supplier', 'SCC',
+            ] + self._ALERT_EDITABLE_COLS
+            ordered = [c for c in preferred_order if c in displaydf.columns]
+            remaining = [c for c in displaydf.columns if c not in ordered]
+            displaydf = displaydf[ordered + remaining]
 
             self.originalalertsdf = displaydf.copy()
             self.populatealertfilters(displaydf)
