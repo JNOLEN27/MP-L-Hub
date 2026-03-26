@@ -1785,6 +1785,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.transactiontable.setItem(row, 4, asnitem)
  
     _ALERT_COL_MAP = {
+        'SCC_NAME':            'SCC',
         'ALERT_DETAILS':       'Alerts',
         'PART':                'Part',
         'PART_DESCRIPTION':    'Part Description',
@@ -1793,7 +1794,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
         'CURRENT_REQUIREMENT': 'Req',
         'SUPPLIER_COUNTRY':    'Country',
         'SUPPLIER_NAME':       'Supplier',
-        'SCC_NAME':            'SCC',
         }
  
     _ALERT_EDITABLE_COLS = [
