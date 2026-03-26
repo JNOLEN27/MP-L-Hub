@@ -101,6 +101,7 @@ class CoverageAnalysisEngine:
             'SUPP_SHP_COUNTRY': 'SHP Country',
             'SCC_NAME': 'SCC Name',
             'Region': 'Region',
+            'Program Supported': 'Program Supported',
             'Comments': 'Comments',
             'SAFETY': 'Safety Days',
             'STOCK': 'Safety Stock',
@@ -126,7 +127,7 @@ class CoverageAnalysisEngine:
  
         preferredorder = [
             'Part Number', 'Part Description', 'MFG Code', 'Supplier Name',
-            'SHP Code', 'SHP Country', 'Region', 'Safety Days', 'Safety Stock',
+            'SHP Code', 'SHP Country', 'Region', 'Program Supported', 'Safety Days', 'Safety Stock',
             'Unit Load Qty', 'Price', 'SCC Name', 'Day Alert', 'Comments',
         ]
  
@@ -158,6 +159,7 @@ class CoverageAnalysisEngine:
  
         coveragedf = self.buildbasetable(uniqueparts, datadict)
         coveragedf = self.addregioncolumn(coveragedf)
+        coveragedf = self.addprogramsupported(coveragedf)
         coveragedf = self.addcoveragecomments(coveragedf)
         coveragedf = self.adddailyprojections(coveragedf, datadict, daysforward)
         coveragedf = self.adddaysuntilzerocolumn(coveragedf)
@@ -240,6 +242,39 @@ class CoverageAnalysisEngine:
         unique_countries = coveragedf['SUPP_SHP_COUNTRY'].unique()
         mapping = {c: self.determineregion(c) for c in unique_countries}
         coveragedf['Region'] = coveragedf['SUPP_SHP_COUNTRY'].map(mapping)
+        return coveragedf
+ 
+    def addprogramsupported(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
+        if coveragedf.empty:
+            return coveragedf
+ 
+        partmatrix = self.import_manager.loaddata("part_matrix")
+        if partmatrix.empty or 'Part No' not in partmatrix.columns:
+            coveragedf['Program Supported'] = ''
+            return coveragedf
+ 
+        v536_col = 'Type 110 (V536)'
+        p519_col = 'Type 100 (P519)'
+ 
+        def classify(row):
+            has_v536 = v536_col in row.index and str(row[v536_col]).strip().upper() == 'X'
+            has_p519 = p519_col in row.index and str(row[p519_col]).strip().upper() == 'X'
+            if has_v536 and has_p519:
+                return 'Common'
+            elif has_v536:
+                return 'V536'
+            elif has_p519:
+                return 'P519'
+            return ''
+ 
+        pm = partmatrix.copy()
+        pm['_program'] = pm.apply(classify, axis=1)
+        pm['_part_key'] = pm['Part No'].astype(str).str.strip().str.upper()
+        lookup = pm.set_index('_part_key')['_program'].to_dict()
+ 
+        coveragedf['Program Supported'] = (
+            coveragedf['PART_NO'].astype(str).str.strip().str.upper().map(lookup).fillna('')
+        )
         return coveragedf
  
     def addinitialstock(self, coveragedf: pd.DataFrame, currentinventory: pd.DataFrame) -> pd.DataFrame:

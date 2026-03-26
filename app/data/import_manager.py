@@ -74,10 +74,10 @@ class DataImportManager:
                 "archive": False},
             "part_matrix": {
                 "name": "Part Matrix",
-                "description": "Part Matrix",
-                "requiredcolumns": ['Part No', 'Type 110 (V536)', 'Type 100 (P519)'],
+                "description": "Part Matrix with Program Support data",
+                "requiredcolumns": ["Part No", "Type 110 (V536)", "Type 100 (P519)"],
                 "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
-                'archive": False}
+                "archive": False}
             }
         self.ensuredirectories()
     
