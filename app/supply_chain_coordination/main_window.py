@@ -590,21 +590,27 @@ class SupplyChainCoordinationWindow(QMainWindow):
     def createindividualpartcoverage(self):
         widget = QWidget()
         layout = QVBoxLayout()
- 
+
         title = QLabel("Individual Part Coverage")
         title.setFont(QFont("Arial", 16, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
- 
+
         searchsection = self.createpartsearchsection()
         layout.addWidget(searchsection)
- 
+
+        # Part info and notes sit side by side
+        inforow = QHBoxLayout()
         self.partinfosection = self.createpartinfosection()
-        layout.addWidget(self.partinfosection)
- 
+        inforow.addWidget(self.partinfosection, stretch=2)
+
+        self.partnotessection = self._createpartnotessection()
+        inforow.addWidget(self.partnotessection, stretch=1)
+        layout.addLayout(inforow)
+
         self.transactionsection = self.createtransactionsection()
         layout.addWidget(self.transactionsection)
- 
+
         widget.setLayout(layout)
         return widget
  
@@ -953,8 +959,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 QMessageBox.information(self, "Part Not Found", f"Part number {partnumber} was not found in the system.")
                 return
  
+            self._currentpartnumber = partnumber
             self.displaypartinfo(partinfo)
             self.displaytransactiontable(transactions)
+            self._loadnoteforpart(partnumber)
  
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Search failed: {str(e)}")
@@ -1201,7 +1209,82 @@ class SupplyChainCoordinationWindow(QMainWindow):
         for label in self.partinfolabels.values():
             label.setText("--")
         self.transactiontable.setRowCount(0)
- 
+        if hasattr(self, 'partnotestextbox'):
+            self.partnotestextbox.blockSignals(True)
+            self.partnotestextbox.clear()
+            self.partnotestextbox.blockSignals(False)
+        self._currentpartnumber = None
+
+    # ------------------------------------------------------------------ #
+    #  Individual Part Notes                                              #
+    # ------------------------------------------------------------------ #
+
+    def _createpartnotessection(self):
+        widget = QWidget()
+        widget.setMaximumHeight(200)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(4, 0, 0, 0)
+
+        notetitle = QLabel("Part Notes")
+        notetitle.setFont(QFont("Arial", 14, QFont.Bold))
+        layout.addWidget(notetitle)
+
+        self.partnotestextbox = QTextEdit()
+        self.partnotestextbox.setPlaceholderText("Enter notes for this part...")
+        self.partnotestextbox.setStyleSheet(
+            "QTextEdit {border: 1px solid #ccc; border-radius: 4px; padding: 4px; background: #fffff5;}"
+        )
+        layout.addWidget(self.partnotestextbox)
+
+        # Debounce timer: saves 600 ms after the user stops typing
+        self._notessavetimer = QTimer()
+        self._notessavetimer.setSingleShot(True)
+        self._notessavetimer.setInterval(600)
+        self._notessavetimer.timeout.connect(self._savecurrentpartnote)
+        self.partnotestextbox.textChanged.connect(self._notessavetimer.start)
+
+        widget.setLayout(layout)
+        return widget
+
+    def _partnotesfile(self):
+        return getsharednetworkpath() / "partnotes.json"
+
+    def _loadpartnotes(self):
+        f = self._partnotesfile()
+        if f.exists():
+            try:
+                with open(f, 'r') as fp:
+                    return json.load(fp)
+            except Exception as e:
+                print(f"Error loading part notes: {e}")
+        return {}
+
+    def _savepartnotes(self, notes: dict):
+        f = self._partnotesfile()
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            with open(f, 'w') as fp:
+                json.dump(notes, fp, indent=2)
+        except Exception as e:
+            print(f"Error saving part notes: {e}")
+
+    def _loadnoteforpart(self, partnumber: str):
+        notes = self._loadpartnotes()
+        self.partnotestextbox.blockSignals(True)
+        self.partnotestextbox.setPlainText(notes.get(partnumber, ''))
+        self.partnotestextbox.blockSignals(False)
+
+    def _savecurrentpartnote(self):
+        if not hasattr(self, '_currentpartnumber') or not self._currentpartnumber:
+            return
+        notes = self._loadpartnotes()
+        text = self.partnotestextbox.toPlainText().strip()
+        if text:
+            notes[self._currentpartnumber] = text
+        else:
+            notes.pop(self._currentpartnumber, None)
+        self._savepartnotes(notes)
+
     def clearcalloffanalysis(self):
         self.calloffpartsearch.clear()
         self.dailyviewtable.setRowCount(0)
@@ -1685,6 +1768,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         'SUPPLIER_NAME':       'Supplier',
         'SUPPLY_SHP_COUNTRY':  'Country',
         'SCC_NAME':            'SCC',
+        'REGION':              'Region',
         }
  
     _ALERT_EDITABLE_COLS = [
@@ -1843,7 +1927,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if selected_parts and 'Alerts' in filtereddf.columns and 'Part' in filtereddf.columns:
             identifier_series = (filtereddf['Alerts'].astype(str) + ' - ' + filtereddf['Part'].astype(str))
             filtereddf = filtereddf[identifier_series.isin(selected_parts)]
- 
+
+        selected_regions = self.alerts_region_filter.getselecteditems()
+        if selected_regions and 'Region' in filtereddf.columns:
+            filtereddf = filtereddf[filtereddf['Region'].isin(selected_regions)]
+
         self.displayalertstable(filtereddf)
  
     def clearalertfilters(self):
@@ -1853,6 +1941,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.alerts_type_filter.selectallitems()
         if hasattr(self, 'alerts_part_filter'):
             self.alerts_part_filter.selectallitems()
+        if hasattr(self, 'alerts_region_filter'):
+            self.alerts_region_filter.selectallitems()
         if hasattr(self, 'originalalertsdf'):
             self.displayalertstable(self.originalalertsdf)
             
@@ -1902,19 +1992,26 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.alertstable.setRowCount(n_rows)
  
             data = alertdf.values
- 
+            int_col_indices = {i for i, c in enumerate(cols) if c in {'Inv', 'Yard', 'Req'}}
+
             for row in range(n_rows):
                 for col in range(n_cols):
                     value = data[row, col]
-                    display_value = str(value) if value is not None and not (isinstance(value, float) and value != value) else ''
- 
+                    if col in int_col_indices and value is not None and not (isinstance(value, float) and value != value):
+                        try:
+                            display_value = str(int(float(value)))
+                        except (ValueError, TypeError):
+                            display_value = str(value)
+                    else:
+                        display_value = str(value) if value is not None and not (isinstance(value, float) and value != value) else ''
+
                     item = QTableWidgetItem(display_value)
                     if col in editable_indices:
                         item.setFlags(item.flags() | Qt.ItemIsEditable)
                         item.setBackground(QColor(255, 255, 230))
                     else:
                         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
- 
+
                     self.alertstable.setItem(row, col, item)
  
         finally:
@@ -1958,10 +2055,17 @@ class SupplyChainCoordinationWindow(QMainWindow):
             
             data = piwddf.values
             
+            int_col_indices = {i for i, c in enumerate(cols) if c in {'Inv', 'Yard', 'Req', 'Port'}}
             for row in range(n_rows):
                 for col in range(n_cols):
                     value = data[row, col]
-                    display_value = (str(value) if value is not None and not (isinstance(value, float) and value != value) else '')
+                    if col in int_col_indices and value is not None and not (isinstance(value, float) and value != value):
+                        try:
+                            display_value = str(int(float(value)))
+                        except (ValueError, TypeError):
+                            display_value = str(value)
+                    else:
+                        display_value = (str(value) if value is not None and not (isinstance(value, float) and value != value) else '')
                     item = QTableWidgetItem(display_value)
                     
                     if col in editable_indices:
