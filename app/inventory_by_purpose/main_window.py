@@ -24,6 +24,114 @@ from app.inventory_by_purpose.ibp_neural_network import InventorybyPurposeNeural
 import app.inventory_by_purpose.monte_tuc_sim as monte_tuc_sim
 
 
+class SimpleMultiSelectFilter(QWidget):
+    """Reusable multi-select filter widget"""
+    selectionChanged = pyqtSignal()
+
+    def __init__(self, placeholder="Select items...", filtertype="Item"):
+        super().__init__()
+        self.filtertype = filtertype
+        self.setFixedHeight(170)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
+
+        self.label = QLabel(f"{filtertype} Filter:")
+        self.label.setFont(QFont("Arial", 10, QFont.Bold))
+        layout.addWidget(self.label)
+
+        self.list_widget = QListWidget()
+        self.list_widget.setMaximumHeight(150)
+        self.list_widget.itemChanged.connect(self.on_item_changed)
+        self.list_widget.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #ccc;
+                font-size: 11px;
+            }
+            QListWidget::item {
+                padding: 2px;
+            }
+        """)
+        layout.addWidget(self.list_widget)
+
+        self.setLayout(layout)
+        self.selected_items = set()
+        self.all_items = []
+
+    def additems(self, items, presorted=False):
+        self.list_widget.clear()
+        self.selected_items.clear()
+        self.all_items.clear()
+
+        select_all_item = QListWidgetItem(f"✓ All {self.filtertype}'s")
+        select_all_item.setFlags(select_all_item.flags() | Qt.ItemIsUserCheckable)
+        select_all_item.setCheckState(Qt.Checked)
+        select_all_item.setData(Qt.UserRole, "SELECT_ALL")
+        select_all_item.setFont(QFont("Arial", 9, QFont.Bold))
+        self.list_widget.addItem(select_all_item)
+
+        items_to_use = items if presorted else sorted(items)
+
+        for item in items_to_use:
+            if item and str(item).strip():
+                list_item = QListWidgetItem(str(item))
+                list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
+                list_item.setCheckState(Qt.Checked)
+                self.list_widget.addItem(list_item)
+                self.selected_items.add(str(item))
+                self.all_items.append(str(item))
+
+        self.update_label()
+
+    def on_item_changed(self, item):
+        self.list_widget.blockSignals(True)
+
+        try:
+            if item.data(Qt.UserRole) == "SELECT_ALL":
+                if item.checkState() == Qt.Checked:
+                    for i in range(1, self.list_widget.count()):
+                        other_item = self.list_widget.item(i)
+                        other_item.setCheckState(Qt.Checked)
+                        self.selected_items.add(other_item.text())
+                else:
+                    for i in range(1, self.list_widget.count()):
+                        other_item = self.list_widget.item(i)
+                        other_item.setCheckState(Qt.Unchecked)
+                    self.selected_items.clear()
+            else:
+                if item.checkState() == Qt.Checked:
+                    self.selected_items.add(item.text())
+                else:
+                    self.selected_items.discard(item.text())
+                    select_all_item = self.list_widget.item(0)
+                    select_all_item.setCheckState(Qt.Unchecked)
+
+                if len(self.selected_items) == len(self.all_items):
+                    select_all_item = self.list_widget.item(0)
+                    select_all_item.setCheckState(Qt.Checked)
+
+        finally:
+            self.list_widget.blockSignals(False)
+
+        self.update_label()
+        self.selectionChanged.emit()
+
+    def update_label(self):
+        self.label.setText(f"{self.filtertype} Filter:")
+
+    def getselecteditems(self):
+        return list(self.selected_items)
+
+    def selectallitems(self):
+        self.list_widget.blockSignals(True)
+        self.selected_items = set(self.all_items)
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            item.setCheckState(Qt.Checked)
+        self.list_widget.blockSignals(False)
+        self.update_label()
+
+
 class InventorybyPurposeWindow(QMainWindow):
     def __init__(self, userdata, parent=None):
         super().__init__(parent)
@@ -42,87 +150,93 @@ class InventorybyPurposeWindow(QMainWindow):
 
     def setupui(self):
         """Setup main UI structure"""
-        centralwidget = QWidget()
-        self.setCentralWidget(centralwidget)
+        try:
+            centralwidget = QWidget()
+            self.setCentralWidget(centralwidget)
 
-        centralwidget.setStyleSheet("QWidget#centralwidget { background-color: #156082; }")
-        centralwidget.setObjectName("centralwidget")
+            centralwidget.setStyleSheet("QWidget#centralwidget { background-color: #156082; }")
+            centralwidget.setObjectName("centralwidget")
 
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+            layout = QVBoxLayout()
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
 
-        # Header
-        headerwidget = QWidget()
-        headerwidget.setStyleSheet("background-color: #156082;")
-        headerlayout = QVBoxLayout(headerwidget)
-        headerlayout.setContentsMargins(10, 8, 10, 8)
+            # Header
+            headerwidget = QWidget()
+            headerwidget.setStyleSheet("background-color: #156082;")
+            headerlayout = QVBoxLayout(headerwidget)
+            headerlayout.setContentsMargins(10, 8, 10, 8)
 
-        title = QLabel("Inventory by Purpose")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("color: white; background-color: transparent;")
-        headerlayout.addWidget(title)
+            title = QLabel("Inventory by Purpose")
+            title.setFont(QFont("Arial", 18, QFont.Bold))
+            title.setAlignment(Qt.AlignCenter)
+            title.setStyleSheet("color: white; background-color: transparent;")
+            headerlayout.addWidget(title)
 
-        layout.addWidget(headerwidget)
+            layout.addWidget(headerwidget)
 
-        self.setMinimumWidth(1000)
+            self.setMinimumWidth(1000)
 
-        # Tabs
-        tabs = QTabWidget()
-        tabs.tabBar().setElideMode(Qt.ElideNone)
-        tabs.tabBar().setExpanding(False)
-        tabs.setStyleSheet("""
-            QTabWidget {
-                background-color: #CCECFF;
-            }
-            QTabWidget::pane {
-                background-color: white;
-                border: 1px solid #99CCEE;
-                border-top: 0px;
-            }
-            QTabBar {
-                background-color: #156082;
-            }
-            QTabBar QToolButton {
-                background-color: #156082;
-                border: 1px solid #99CCEE;
-                color: white;
-            }
-            QTabBar::tab {
-                background-color: white;
-                color: #1A3A6B;
-                font-weight: bold;
-                padding: 6px 14px;
-                min-width: 172px;
-                border: 1px solid #99CCEE;
-                border-bottom: none;
-                border-radius: 4px 4px 0px 0px;
-                margin-right: 2px;
-            }
-            QTabBar::tab:selected {
-                background-color: #CCECFF;
-                color: black;
-                border: 1px solid #99CCEE;
-                border-bottom: 1px solid #CCECFF;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #E8F6FF;
-            }
-        """)
+            # Tabs
+            tabs = QTabWidget()
+            tabs.tabBar().setElideMode(Qt.ElideNone)
+            tabs.tabBar().setExpanding(False)
+            tabs.setStyleSheet("""
+                QTabWidget {
+                    background-color: #CCECFF;
+                }
+                QTabWidget::pane {
+                    background-color: white;
+                    border: 1px solid #99CCEE;
+                    border-top: 0px;
+                }
+                QTabBar {
+                    background-color: #156082;
+                }
+                QTabBar QToolButton {
+                    background-color: #156082;
+                    border: 1px solid #99CCEE;
+                    color: white;
+                }
+                QTabBar::tab {
+                    background-color: white;
+                    color: #1A3A6B;
+                    font-weight: bold;
+                    padding: 6px 14px;
+                    min-width: 172px;
+                    border: 1px solid #99CCEE;
+                    border-bottom: none;
+                    border-radius: 4px 4px 0px 0px;
+                    margin-right: 2px;
+                }
+                QTabBar::tab:selected {
+                    background-color: #CCECFF;
+                    color: black;
+                    border: 1px solid #99CCEE;
+                    border-bottom: 1px solid #CCECFF;
+                }
+                QTabBar::tab:hover:!selected {
+                    background-color: #E8F6FF;
+                }
+            """)
 
-        tieduptab = self.create_tiedup_capital_tab()
-        suppliertab = self.create_supplier_deep_dive_tab()
-        strategytab = self.create_strategy_analysis_tab()
+            tieduptab = self.create_tiedup_capital_tab()
+            suppliertab = self.create_supplier_deep_dive_tab()
+            strategytab = self.create_strategy_analysis_tab()
 
-        tabs.addTab(tieduptab, "Tied-up-capital forecast")
-        tabs.addTab(suppliertab, "Supplier Deep Dive")
-        tabs.addTab(strategytab, "Strategy Analysis")
+            tabs.addTab(tieduptab, "Tied-up-capital forecast")
+            tabs.addTab(suppliertab, "Supplier Deep Dive")
+            tabs.addTab(strategytab, "Strategy Analysis")
 
-        layout.addWidget(tabs)
+            layout.addWidget(tabs)
 
-        self.statusBar().showMessage(f"Logged in as: {self.userdata['username']}")
-        centralwidget.setLayout(layout)
+            self.statusBar().showMessage(f"Logged in as: {self.userdata['username']}")
+            centralwidget.setLayout(layout)
+        except Exception as e:
+            print(f"Error in setupui: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def create_tiedup_capital_tab(self):
         """Create Tied-up-capital forecast tab"""
@@ -329,112 +443,6 @@ class InventorybyPurposeWindow(QMainWindow):
 
     def create_multiselect_dropdown(self, placeholdertext, filtertype="Item"):
         """Create a multi-select filter widget"""
-        class SimpleMultiSelectFilter(QWidget):
-            selectionChanged = pyqtSignal()
-
-            def __init__(self, placeholder="Select items...", filtertype="Item"):
-                super().__init__()
-                self.filtertype = filtertype
-                self.setFixedHeight(170)
-
-                layout = QVBoxLayout()
-                layout.setContentsMargins(5, 5, 5, 5)
-
-                self.label = QLabel(f"{filtertype} Filter:")
-                self.label.setFont(QFont("Arial", 10, QFont.Bold))
-                layout.addWidget(self.label)
-
-                self.list_widget = QListWidget()
-                self.list_widget.setMaximumHeight(150)
-                self.list_widget.itemChanged.connect(self.on_item_changed)
-                self.list_widget.setStyleSheet("""
-                    QListWidget {
-                        border: 1px solid #ccc;
-                        font-size: 11px;
-                    }
-                    QListWidget::item {
-                        padding: 2px;
-                    }
-                """)
-                layout.addWidget(self.list_widget)
-
-                self.setLayout(layout)
-                self.selected_items = set()
-                self.all_items = []
-
-            def additems(self, items, presorted=False):
-                self.list_widget.clear()
-                self.selected_items.clear()
-                self.all_items.clear()
-
-                select_all_item = QListWidgetItem(f"✓ All {self.filtertype}'s")
-                select_all_item.setFlags(select_all_item.flags() | Qt.ItemIsUserCheckable)
-                select_all_item.setCheckState(Qt.Checked)
-                select_all_item.setData(Qt.UserRole, "SELECT_ALL")
-                select_all_item.setFont(QFont("Arial", 9, QFont.Bold))
-                self.list_widget.addItem(select_all_item)
-
-                items_to_use = items if presorted else sorted(items)
-
-                for item in items_to_use:
-                    if item and str(item).strip():
-                        list_item = QListWidgetItem(str(item))
-                        list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
-                        list_item.setCheckState(Qt.Checked)
-                        self.list_widget.addItem(list_item)
-                        self.selected_items.add(str(item))
-                        self.all_items.append(str(item))
-
-                self.update_label()
-
-            def on_item_changed(self, item):
-                self.list_widget.blockSignals(True)
-
-                try:
-                    if item.data(Qt.UserRole) == "SELECT_ALL":
-                        if item.checkState() == Qt.Checked:
-                            for i in range(1, self.list_widget.count()):
-                                other_item = self.list_widget.item(i)
-                                other_item.setCheckState(Qt.Checked)
-                                self.selected_items.add(other_item.text())
-                        else:
-                            for i in range(1, self.list_widget.count()):
-                                other_item = self.list_widget.item(i)
-                                other_item.setCheckState(Qt.Unchecked)
-                            self.selected_items.clear()
-                    else:
-                        if item.checkState() == Qt.Checked:
-                            self.selected_items.add(item.text())
-                        else:
-                            self.selected_items.discard(item.text())
-                            select_all_item = self.list_widget.item(0)
-                            select_all_item.setCheckState(Qt.Unchecked)
-
-                        if len(self.selected_items) == len(self.all_items):
-                            select_all_item = self.list_widget.item(0)
-                            select_all_item.setCheckState(Qt.Checked)
-
-                finally:
-                    self.list_widget.blockSignals(False)
-
-                self.update_label()
-                self.selectionChanged.emit()
-
-            def update_label(self):
-                self.label.setText(f"{self.filtertype} Filter:")
-
-            def getselecteditems(self):
-                return list(self.selected_items)
-
-            def selectallitems(self):
-                self.list_widget.blockSignals(True)
-                self.selected_items = set(self.all_items)
-                for i in range(self.list_widget.count()):
-                    item = self.list_widget.item(i)
-                    item.setCheckState(Qt.Checked)
-                self.list_widget.blockSignals(False)
-                self.update_label()
-
         return SimpleMultiSelectFilter(placeholdertext, filtertype)
 
     def load_required_data(self):
@@ -486,10 +494,16 @@ class InventorybyPurposeWindow(QMainWindow):
         """Compute top 10 parts by value"""
         try:
             inv = self._current_inventory.copy()
-            if 'PRICE' not in inv.columns or 'BEGINNING_INVENTORY_TODAY' not in inv.columns or 'YARD_INVENTORY_TODYAY' not in inv.columns:
+            if 'PRICE' not in inv.columns or 'BEGINNING_INVENTORY_TODAY' not in inv.columns:
                 return pd.DataFrame()
 
-            inv['Value'] = inv['PRICE'] * (inv['BEGINNING_INVENTORY_TODAY'] + inv['YARD_INVENTORY_TODYAY'])
+            # Calculate value from available inventory columns
+            qty_col = 'BEGINNING_INVENTORY_TODAY'
+            if 'YARD_INVENTORY_TODAY' in inv.columns:
+                inv['Value'] = inv['PRICE'] * (inv['BEGINNING_INVENTORY_TODAY'] + inv['YARD_INVENTORY_TODAY'])
+            else:
+                inv['Value'] = inv['PRICE'] * inv['BEGINNING_INVENTORY_TODAY']
+
             top = inv.nlargest(10, 'Value')[['PART_NO', 'PART_DESC', 'Value']]
             return top
         except Exception as e:
@@ -503,7 +517,12 @@ class InventorybyPurposeWindow(QMainWindow):
             if 'SUPP_NAME' not in inv.columns or 'PRICE' not in inv.columns:
                 return pd.DataFrame()
 
-            inv['Value'] = inv['PRICE'] * (inv['BEGINNING_INVENTORY_TODAY'] + inv['YARD_INVENTORY_TODYAY'])
+            # Calculate value from available inventory columns
+            if 'YARD_INVENTORY_TODAY' in inv.columns:
+                inv['Value'] = inv['PRICE'] * (inv['BEGINNING_INVENTORY_TODAY'] + inv['YARD_INVENTORY_TODAY'])
+            else:
+                inv['Value'] = inv['PRICE'] * inv['BEGINNING_INVENTORY_TODAY']
+
             supplier_value = inv.groupby('SUPP_NAME')['Value'].sum().reset_index()
             top = supplier_value.nlargest(10, 'Value')
             top.columns = ['Supplier', 'Value']
@@ -519,7 +538,12 @@ class InventorybyPurposeWindow(QMainWindow):
             if 'SUPP_SHP_COUNTRY' not in inv.columns:
                 return pd.DataFrame()
 
-            inv['Value'] = inv['PRICE'] * (inv['BEGINNING_INVENTORY_TODAY'] + inv['YARD_INVENTORY_TODYAY'])
+            # Calculate value from available inventory columns
+            if 'YARD_INVENTORY_TODAY' in inv.columns:
+                inv['Value'] = inv['PRICE'] * (inv['BEGINNING_INVENTORY_TODAY'] + inv['YARD_INVENTORY_TODAY'])
+            else:
+                inv['Value'] = inv['PRICE'] * inv['BEGINNING_INVENTORY_TODAY']
+
             # Determine region from country
             inv['Region'] = inv['SUPP_SHP_COUNTRY'].apply(self.determine_region)
             region_value = inv.groupby('Region')['Value'].sum().reset_index().sort_values('Value', ascending=False)
