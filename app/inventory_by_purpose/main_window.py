@@ -4,7 +4,9 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, Tuple
-from mpl_toolkits.mplot3d import Axes3D
+
+# DEFER matplotlib 3D import until needed - can cause Qt crashes on some systems
+# from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -356,13 +358,17 @@ class InventorybyPurposeWindow(QMainWindow):
             tableswidget.setLayout(tableslayout)
             layout.addWidget(tableswidget)
 
-            # Chart area
+            # Chart area - CREATE PLACEHOLDER ONLY
             chartlabel = QLabel("Monte Carlo Simulation Results")
             chartlabel.setFont(QFont("Arial", 12, QFont.Bold))
             layout.addWidget(chartlabel)
 
-            self.tiedup_canvas = FigureCanvas(Figure(figsize=(10, 5), dpi=100))
-            layout.addWidget(self.tiedup_canvas)
+            # Create placeholder for canvas - don't create actual canvas until needed
+            self.tiedup_canvas_container = QWidget()
+            self.tiedup_canvas_container_layout = QVBoxLayout(self.tiedup_canvas_container)
+            self.tiedup_canvas = None  # Will be created on first use
+            self.tiedup_canvas_container_layout.addWidget(QLabel("Click 'Generate Forecast' to display chart"))
+            layout.addWidget(self.tiedup_canvas_container)
 
             widget.setLayout(layout)
             logger.info("Tied-up-capital forecast tab created successfully")
@@ -476,13 +482,17 @@ class InventorybyPurposeWindow(QMainWindow):
 
             layout.addLayout(filtergrid)
 
-            # 3D Scatter plot
+            # 3D Scatter plot - CREATE PLACEHOLDER ONLY
             plotlabel = QLabel("3D Scatter Plot: SAFETY vs STOCK vs Price")
             plotlabel.setFont(QFont("Arial", 12, QFont.Bold))
             layout.addWidget(plotlabel)
 
-            self.strategy_canvas = FigureCanvas(Figure(figsize=(10, 6), dpi=100))
-            layout.addWidget(self.strategy_canvas)
+            # Create placeholder for canvas - don't create actual 3D canvas until needed
+            self.strategy_canvas_container = QWidget()
+            self.strategy_canvas_container_layout = QVBoxLayout(self.strategy_canvas_container)
+            self.strategy_canvas = None  # Will be created on first use
+            self.strategy_canvas_container_layout.addWidget(QLabel("Click 'Load Analysis Data' to display 3D plot"))
+            layout.addWidget(self.strategy_canvas_container)
 
             # Table
             tablelabel = QLabel("Filtered Parts Data")
@@ -1026,6 +1036,16 @@ class InventorybyPurposeWindow(QMainWindow):
             return
 
         try:
+            # Import 3D modules only when needed (late binding)
+            from mpl_toolkits.mplot3d import Axes3D
+
+            # Create canvas if it doesn't exist yet
+            if self.strategy_canvas is None:
+                self.strategy_canvas = FigureCanvas(Figure(figsize=(10, 6), dpi=100))
+                # Replace placeholder with actual canvas
+                self.strategy_canvas_container_layout.takeAt(0).widget().deleteLater()
+                self.strategy_canvas_container_layout.addWidget(self.strategy_canvas)
+
             # Find the actual column names
             safety_col = next((c for c in df.columns if 'SAFETY' in c), None)
             stock_col = next((c for c in df.columns if 'STOCK' in c or 'BEGINNING' in c), None)
