@@ -26,7 +26,7 @@ if errorlevel 1 (
 
 REM -- Install app runtime dependencies --
 echo Installing runtime dependencies...
-python -m pip install PyQt5 pandas numpy bcrypt
+python -m pip install PyQt5 pandas numpy bcrypt matplotlib
 if errorlevel 1 (
     echo WARNING: Some dependencies may have failed. Continuing...
 )
