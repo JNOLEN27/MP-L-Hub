@@ -8,16 +8,23 @@
 
 import sys
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
+
+# Explicitly collect all files for matplotlib and mpl_toolkits
+matplotlib_datas, matplotlib_binaries, matplotlib_hiddenimports = collect_all('matplotlib')
+mpl_datas, mpl_binaries, mpl_hiddenimports = collect_all('mpl_toolkits')
 
 a = Analysis(
     ['MP&L_Hub.py'],
     pathex=[str(Path('.').resolve())],
-    binaries=[],
+    binaries=[*matplotlib_binaries, *mpl_binaries],
     datas=[
         # Include the entire app/ package
         ('app', 'app'),
+        *matplotlib_datas,
+        *mpl_datas,
     ],
     hiddenimports=[
         # PyQt5
@@ -30,8 +37,9 @@ a = Analysis(
         'pandas',
         'numpy',
         'bcrypt',
-        # Matplotlib and related (REQUIRED for inventory by purpose app)
-        'matplotlib',
+        # Matplotlib - fully collected via collect_all above
+        *matplotlib_hiddenimports,
+        *mpl_hiddenimports,
         # Standard library modules sometimes missed by PyInstaller
         'json',
         'pathlib',
