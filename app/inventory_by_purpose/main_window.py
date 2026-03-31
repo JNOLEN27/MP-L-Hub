@@ -395,14 +395,14 @@ class InventorybyPurposeWindow(QMainWindow):
             buttonlayout.addStretch()
             layout.addLayout(buttonlayout)
 
-            # Supplier filter
+            # Supplier filter - DO NOT connect signal yet
             filterlayout = QHBoxLayout()
             filterlabel = QLabel("Supplier Filter:")
             filterlabel.setFont(QFont("Arial", 12, QFont.Bold))
             filterlayout.addWidget(filterlabel)
 
             self.supplier_filter = self.create_multiselect_dropdown("Select Suppliers...", "Supplier")
-            self.supplier_filter.selectionChanged.connect(self.apply_supplier_filter)
+            # Signal will be connected after filters are fully created
             filterlayout.addWidget(self.supplier_filter)
 
             filterlayout.addStretch()
@@ -453,29 +453,20 @@ class InventorybyPurposeWindow(QMainWindow):
             filtergrid = QGridLayout()
             filtergrid.setSpacing(10)
 
-            # Part filter
+            # Create filters WITHOUT connecting signals yet
             self.strategy_part_filter = self.create_multiselect_dropdown("Select Parts...", "Part")
-            self.strategy_part_filter.selectionChanged.connect(self.apply_strategy_filters)
             filtergrid.addWidget(self.strategy_part_filter, 0, 0)
 
-            # Supplier filter
             self.strategy_supplier_filter = self.create_multiselect_dropdown("Select Suppliers...", "Supplier")
-            self.strategy_supplier_filter.selectionChanged.connect(self.apply_strategy_filters)
             filtergrid.addWidget(self.strategy_supplier_filter, 0, 1)
 
-            # Region filter
             self.strategy_region_filter = self.create_multiselect_dropdown("Select Regions...", "Region")
-            self.strategy_region_filter.selectionChanged.connect(self.apply_strategy_filters)
             filtergrid.addWidget(self.strategy_region_filter, 0, 2)
 
-            # Country filter
             self.strategy_country_filter = self.create_multiselect_dropdown("Select Countries...", "Country")
-            self.strategy_country_filter.selectionChanged.connect(self.apply_strategy_filters)
             filtergrid.addWidget(self.strategy_country_filter, 1, 0)
 
-            # SCC filter
             self.strategy_scc_filter = self.create_multiselect_dropdown("Select SCC...", "SCC")
-            self.strategy_scc_filter.selectionChanged.connect(self.apply_strategy_filters)
             filtergrid.addWidget(self.strategy_scc_filter, 1, 1)
 
             clearfilterbtn = QPushButton("Clear Filters")
@@ -807,6 +798,10 @@ class InventorybyPurposeWindow(QMainWindow):
 
             suppliers = self._master_data[supp_col].dropna().unique()
             self.supplier_filter.additems(suppliers)
+
+            # NOW connect the signal after filters are populated
+            self.supplier_filter.selectionChanged.connect(self.apply_supplier_filter)
+
             QMessageBox.information(self, "Success", f"Loaded {len(suppliers)} suppliers")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load suppliers: {str(e)}")
@@ -840,11 +835,40 @@ class InventorybyPurposeWindow(QMainWindow):
             self._master_data['Region'] = self._master_data[country_col].apply(self.determine_region)
             regions = self._master_data['Region'].dropna().unique()
 
+            # Populate filters
             self.strategy_part_filter.additems(parts)
             self.strategy_supplier_filter.additems(suppliers)
             self.strategy_region_filter.additems(regions)
             self.strategy_country_filter.additems(countries)
             self.strategy_scc_filter.additems(sccs)
+
+            # NOW connect signals after filters are populated
+            try:
+                self.strategy_part_filter.selectionChanged.disconnect()
+            except:
+                pass
+            try:
+                self.strategy_supplier_filter.selectionChanged.disconnect()
+            except:
+                pass
+            try:
+                self.strategy_region_filter.selectionChanged.disconnect()
+            except:
+                pass
+            try:
+                self.strategy_country_filter.selectionChanged.disconnect()
+            except:
+                pass
+            try:
+                self.strategy_scc_filter.selectionChanged.disconnect()
+            except:
+                pass
+
+            self.strategy_part_filter.selectionChanged.connect(self.apply_strategy_filters)
+            self.strategy_supplier_filter.selectionChanged.connect(self.apply_strategy_filters)
+            self.strategy_region_filter.selectionChanged.connect(self.apply_strategy_filters)
+            self.strategy_country_filter.selectionChanged.connect(self.apply_strategy_filters)
+            self.strategy_scc_filter.selectionChanged.connect(self.apply_strategy_filters)
 
             # Display all data initially
             self.display_3d_scatterplot(self._master_data)
