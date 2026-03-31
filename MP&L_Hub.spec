@@ -30,6 +30,13 @@ a = Analysis(
         'pandas',
         'numpy',
         'bcrypt',
+        # Matplotlib and related (REQUIRED for inventory by purpose app)
+        'matplotlib',
+        'matplotlib.pyplot',
+        'matplotlib.backends.backend_qt5agg',
+        'matplotlib.figure',
+        'mpl_toolkits',
+        'mpl_toolkits.mplot3d',
         # Standard library modules sometimes missed by PyInstaller
         'json',
         'pathlib',
@@ -64,6 +71,7 @@ a = Analysis(
         'app.supply_chain_coordination.waterfall_analysis',
         'app.supply_chain_coordination.ldjis_coverage',
         'app.inventory_by_purpose',
+        'app.inventory_by_purpose.main_window',
         'app.inventory_by_purpose.ibp_neural_network',
         'app.inventory_by_purpose.monte_tuc_sim',
         'app.inventory_by_purpose.odbc_config_dialog',
@@ -73,7 +81,6 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         # Exclude large optional packages not needed at runtime
-        'matplotlib',
         'scipy',
         'IPython',
         'notebook',

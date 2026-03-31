@@ -4,38 +4,65 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, Tuple
-
-# DEFER matplotlib 3D import until needed - can cause Qt crashes on some systems
-# from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
 import logging
 import traceback as tb
 
-from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTabWidget, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea,
-    QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame,
-    QApplication, QLineEdit, QGridLayout, QProgressDialog, QSpinBox
-)
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont, QColor
-
-from app.utils.config import APPWINDOWSIZE, getsharednetworkpath
-from app.data.import_manager import DataImportManager
-from app.inventory_by_purpose.ibp_neural_network import InventorybyPurposeNeuralNetwork
-import app.inventory_by_purpose.monte_tuc_sim as monte_tuc_sim
-
-# Setup logging to file
+# Setup logging FIRST - before any other imports
 LOG_FILE = Path.home() / "InventoryByPurpose_Error.log"
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+try:
+    logging.basicConfig(
+        filename=LOG_FILE,
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+except Exception as e:
+    print(f"WARNING: Could not set up logging: {e}")
+
 logger = logging.getLogger(__name__)
+logger.info("=== Starting imports for InventorybyPurposeWindow ===")
+
+try:
+    # DEFER matplotlib 3D import until needed - can cause Qt crashes on some systems
+    # from mpl_toolkits.mplot3d import Axes3D
+    logger.info("Importing matplotlib...")
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.figure import Figure
+    logger.info("Matplotlib imported successfully")
+
+    logger.info("Importing PyQt5...")
+    from PyQt5.QtWidgets import (
+        QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+        QTabWidget, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea,
+        QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame,
+        QApplication, QLineEdit, QGridLayout, QProgressDialog, QSpinBox
+    )
+    from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+    from PyQt5.QtGui import QFont, QColor
+    logger.info("PyQt5 imported successfully")
+
+    logger.info("Importing app modules...")
+    from app.utils.config import APPWINDOWSIZE, getsharednetworkpath
+    from app.data.import_manager import DataImportManager
+    from app.inventory_by_purpose.ibp_neural_network import InventorybyPurposeNeuralNetwork
+    import app.inventory_by_purpose.monte_tuc_sim as monte_tuc_sim
+    logger.info("App modules imported successfully")
+
+    logger.info("=== All imports completed successfully ===")
+
+except Exception as e:
+    error_msg = f"=== CRITICAL ERROR DURING IMPORTS ===\n{str(e)}\n{tb.format_exc()}"
+    logger.error(error_msg)
+    print(error_msg)
+    # Try to show this to user even if GUI fails
+    try:
+        from PyQt5.QtWidgets import QMessageBox, QApplication
+        app = QApplication([])
+        QMessageBox.critical(None, "Import Error", f"Failed to import modules:\n{str(e)}\n\nCheck log at: {LOG_FILE}")
+    except:
+        pass
+    raise
 
 
 class SimpleMultiSelectFilter(QWidget):
@@ -86,14 +113,20 @@ class SimpleMultiSelectFilter(QWidget):
 
         items_to_use = items if presorted else sorted(items)
 
-        for item in items_to_use:
-            if item and str(item).strip():
-                list_item = QListWidgetItem(str(item))
-                list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
-                list_item.setCheckState(Qt.Checked)
-                self.list_widget.addItem(list_item)
-                self.selected_items.add(str(item))
-                self.all_items.append(str(item))
+        # Batch add items to prevent stack overflow with large lists
+        BATCH_SIZE = 100
+        for batch_start in range(0, len(items_to_use), BATCH_SIZE):
+            batch = items_to_use[batch_start:batch_start + BATCH_SIZE]
+            for item in batch:
+                if item and str(item).strip():
+                    list_item = QListWidgetItem(str(item))
+                    list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
+                    list_item.setCheckState(Qt.Checked)
+                    self.list_widget.addItem(list_item)
+                    self.selected_items.add(str(item))
+                    self.all_items.append(str(item))
+            # Process events to prevent UI freezing
+            QApplication.processEvents()
 
         self.update_label()
 
