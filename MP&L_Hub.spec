@@ -84,6 +84,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         # Exclude large optional packages not needed at runtime
+        'torch',        # Optional - only needed for neural network features
         'scipy',
         'IPython',
         'notebook',

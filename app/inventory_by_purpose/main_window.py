@@ -45,7 +45,14 @@ try:
     logger.info("Importing app modules...")
     from app.utils.config import APPWINDOWSIZE, getsharednetworkpath
     from app.data.import_manager import DataImportManager
-    from app.inventory_by_purpose.ibp_neural_network import InventorybyPurposeNeuralNetwork
+    try:
+        from app.inventory_by_purpose.ibp_neural_network import InventorybyPurposeNeuralNetwork
+        TORCH_AVAILABLE = True
+        logger.info("PyTorch/Neural network imported successfully")
+    except ModuleNotFoundError as e:
+        TORCH_AVAILABLE = False
+        InventorybyPurposeNeuralNetwork = None
+        logger.warning(f"PyTorch not available - neural network features disabled: {e}")
     import app.inventory_by_purpose.monte_tuc_sim as monte_tuc_sim
     logger.info("App modules imported successfully")
 
@@ -192,8 +199,12 @@ class InventorybyPurposeWindow(QMainWindow):
             logger.info("DataImportManager initialized successfully")
 
             logger.info("Initializing InventorybyPurposeNeuralNetwork...")
-            self.nn_engine = InventorybyPurposeNeuralNetwork(self.import_manager)
-            logger.info("Neural network engine initialized successfully")
+            if TORCH_AVAILABLE and InventorybyPurposeNeuralNetwork is not None:
+                self.nn_engine = InventorybyPurposeNeuralNetwork(self.import_manager)
+                logger.info("Neural network engine initialized successfully")
+            else:
+                self.nn_engine = None
+                logger.warning("Neural network engine unavailable (torch not installed)")
 
             # Cache for data
             self._master_data = None
