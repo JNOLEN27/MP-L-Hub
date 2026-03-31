@@ -48,7 +48,7 @@ class Application:
             return
         
         if appkey == "inventory_by_purpose":
-            from app.inventory_by_purpose.main_window_minimal import InventorybyPurposeWindow
+            from app.inventory_by_purpose.main_window import InventorybyPurposeWindow
             window = InventorybyPurposeWindow(self.userdata, self.launcherwindow)
             
         elif appkey == "supply_chain_coordination":
