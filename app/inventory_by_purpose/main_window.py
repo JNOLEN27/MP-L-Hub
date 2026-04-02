@@ -496,31 +496,41 @@ class InventorybyPurposeWindow(QMainWindow):
         try:
             logger.info("Creating Strategy Analysis tab...")
             widget = QWidget()
-            layout = QVBoxLayout()
+            outer_layout = QVBoxLayout()
 
             title = QLabel("Strategy Analysis")
             title.setFont(QFont("Arial", 16, QFont.Bold))
             title.setAlignment(Qt.AlignCenter)
-            layout.addWidget(title)
+            outer_layout.addWidget(title)
 
-            # Button to load data
+            # ── Main horizontal split: left (controls + table) | right (scatter plot) ──
+            main_split = QHBoxLayout()
+            main_split.setSpacing(10)
+
+            # ── LEFT SIDE ─────────────────────────────────────────────────────────────
+            left_widget = QWidget()
+            left_layout = QVBoxLayout(left_widget)
+            left_layout.setContentsMargins(0, 0, 0, 0)
+            left_layout.setSpacing(6)
+
+            # Load button
             buttonlayout = QHBoxLayout()
             loadbtn = QPushButton("Load Analysis Data")
             loadbtn.clicked.connect(self.load_strategy_data)
             loadbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
             buttonlayout.addWidget(loadbtn)
             buttonlayout.addStretch()
-            layout.addLayout(buttonlayout)
+            left_layout.addLayout(buttonlayout)
 
-            # Filter section
+            # Filters label
             filterlabel = QLabel("Filters:")
             filterlabel.setFont(QFont("Arial", 12, QFont.Bold))
-            layout.addWidget(filterlabel)
+            left_layout.addWidget(filterlabel)
 
+            # Filter row — all 5 filters + Clear button on one line
             filtergrid = QHBoxLayout()
             filtergrid.setSpacing(10)
 
-            # Create filters WITHOUT connecting signals yet
             self.strategy_part_filter = self.create_multiselect_dropdown("Select Parts...", "Part")
             filtergrid.addWidget(self.strategy_part_filter)
 
@@ -539,47 +549,44 @@ class InventorybyPurposeWindow(QMainWindow):
             clearfilterbtn = QPushButton("Clear Filters")
             clearfilterbtn.clicked.connect(self.clear_strategy_filters)
             clearfilterbtn.setStyleSheet("""QPushButton {background-color: #E97132; color: white; padding: 8px 16px; border: none; border-radius: 5px;} QPushButton:hover {background-color: #da190b;}""")
-            clearfilterbtn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
             filtergrid.addWidget(clearfilterbtn)
+            filtergrid.setAlignment(clearfilterbtn, Qt.AlignVCenter)
             filtergrid.addStretch()
+            left_layout.addLayout(filtergrid)
 
-            layout.addLayout(filtergrid)
-
-            # 3D plot and table side by side
-            content_layout = QHBoxLayout()
-            content_layout.setSpacing(10)
-
-            # Left: 3D Scatter plot
-            plot_widget = QWidget()
-            plot_layout = QVBoxLayout(plot_widget)
-            plot_layout.setContentsMargins(0, 0, 0, 0)
-            plotlabel = QLabel("3D Scatter Plot: SAFETY vs STOCK vs Price")
-            plotlabel.setFont(QFont("Arial", 12, QFont.Bold))
-            plot_layout.addWidget(plotlabel)
-            # Create placeholder for canvas - don't create actual 3D canvas until needed
-            self.strategy_canvas_container = QWidget()
-            self.strategy_canvas_container_layout = QVBoxLayout(self.strategy_canvas_container)
-            self.strategy_canvas = None  # Will be created on first use
-            self.strategy_canvas_container_layout.addWidget(QLabel("Click 'Load Analysis Data' to display 3D plot"))
-            plot_layout.addWidget(self.strategy_canvas_container)
-            content_layout.addWidget(plot_widget, 3)  # 60% width
-
-            # Right: Table
-            table_widget = QWidget()
-            table_layout = QVBoxLayout(table_widget)
-            table_layout.setContentsMargins(0, 0, 0, 0)
+            # Filtered Parts Data table
             tablelabel = QLabel("Filtered Parts Data")
             tablelabel.setFont(QFont("Arial", 12, QFont.Bold))
-            table_layout.addWidget(tablelabel)
+            left_layout.addWidget(tablelabel)
+
             self.strategy_table = QTableWidget()
             self.strategy_table.setSortingEnabled(True)
             self.strategy_table.setStyleSheet("""QTableWidget {gridline-color: #d0d0d0; background-color: white;} QTableWidget::item {padding: 6px; border: 1px solid #d0d0d0;} QHeaderView::section {background-color: #f0f0f0; padding: 8px; border: 1px solid #d0d0d0; font-weight: bold;}""")
-            table_layout.addWidget(self.strategy_table)
-            content_layout.addWidget(table_widget, 2)  # 40% width
+            left_layout.addWidget(self.strategy_table)
 
-            layout.addLayout(content_layout)
+            main_split.addWidget(left_widget, 2)  # ~40% width
 
-            widget.setLayout(layout)
+            # ── RIGHT SIDE: 3D scatter plot (full height) ─────────────────────────────
+            right_widget = QWidget()
+            right_layout = QVBoxLayout(right_widget)
+            right_layout.setContentsMargins(0, 0, 0, 0)
+            right_layout.setSpacing(4)
+
+            plotlabel = QLabel("3D Scatter Plot: SAFETY vs STOCK vs Price")
+            plotlabel.setFont(QFont("Arial", 12, QFont.Bold))
+            right_layout.addWidget(plotlabel)
+
+            self.strategy_canvas_container = QWidget()
+            self.strategy_canvas_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.strategy_canvas_container_layout = QVBoxLayout(self.strategy_canvas_container)
+            self.strategy_canvas = None  # Created lazily on first use
+            self.strategy_canvas_container_layout.addWidget(QLabel("Click 'Load Analysis Data' to display 3D plot"))
+            right_layout.addWidget(self.strategy_canvas_container)  # expands to fill height
+
+            main_split.addWidget(right_widget, 3)  # ~60% width
+
+            outer_layout.addLayout(main_split)
+            widget.setLayout(outer_layout)
             logger.info("Strategy Analysis tab created successfully")
             return widget
 
@@ -1175,7 +1182,8 @@ class InventorybyPurposeWindow(QMainWindow):
 
             # Create canvas if it doesn't exist yet
             if self.strategy_canvas is None:
-                self.strategy_canvas = FigureCanvas(Figure(figsize=(6, 5), dpi=100))
+                self.strategy_canvas = FigureCanvas(Figure(figsize=(6, 8), dpi=100))
+                self.strategy_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
                 # Replace placeholder with actual canvas
                 self.strategy_canvas_container_layout.takeAt(0).widget().deleteLater()
                 self.strategy_canvas_container_layout.addWidget(self.strategy_canvas)
