@@ -53,7 +53,14 @@ try:
         TORCH_AVAILABLE = False
         InventorybyPurposeNeuralNetwork = None
         logger.warning(f"PyTorch not available - neural network features disabled: {e}")
-    import app.inventory_by_purpose.monte_tuc_sim as monte_tuc_sim
+    try:
+        import app.inventory_by_purpose.monte_tuc_sim as monte_tuc_sim
+        MONTE_CARLO_AVAILABLE = True
+        logger.info("Monte Carlo simulation module imported successfully")
+    except (ModuleNotFoundError, ImportError) as e:
+        monte_tuc_sim = None
+        MONTE_CARLO_AVAILABLE = False
+        logger.warning(f"Monte Carlo module unavailable: {e}")
     logger.info("App modules imported successfully")
 
     logger.info("=== All imports completed successfully ===")

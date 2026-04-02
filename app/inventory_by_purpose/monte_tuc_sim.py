@@ -65,7 +65,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from import_manager import DataImportManager
+from app.data.import_manager import DataImportManager
 from app.utils.config import SHAREDNETWORKPATH
 
 # ─── Constants ────────────────────────────────────────────────────────────────
