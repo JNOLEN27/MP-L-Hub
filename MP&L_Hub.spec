@@ -37,6 +37,7 @@ a = Analysis(
         'pandas',
         'numpy',
         'bcrypt',
+        'tqdm',
         # Matplotlib - fully collected via collect_all above
         *matplotlib_hiddenimports,
         *mpl_hiddenimports,
