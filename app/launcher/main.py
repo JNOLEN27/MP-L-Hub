@@ -59,7 +59,8 @@ class Application:
             QMessageBox.warning(self.launcherwindow, "Not Implemented", f"Application '{appkey}' is not yet implemented.")
             return
         
-        window.setAttribute(Qt.WA_DeleteOnClose)
+        if appkey != "inventory_by_purpose":  # IbP sets this internally
+            window.setAttribute(Qt.WA_DeleteOnClose)
         window.destroyed.connect(lambda: self.closeapplication(appkey))
         self.openappwindows[appkey] = window
         window.show()
