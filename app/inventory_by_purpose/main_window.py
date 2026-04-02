@@ -36,10 +36,10 @@ try:
         QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
         QTabWidget, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea,
         QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame,
-        QApplication, QLineEdit, QGridLayout, QProgressDialog, QSpinBox
+        QApplication, QLineEdit, QGridLayout, QProgressDialog, QSpinBox, QSizePolicy
     )
     from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-    from PyQt5.QtGui import QFont, QColor
+    from PyQt5.QtGui import QFont, QColor, QFontMetrics
     logger.info("PyQt5 imported successfully")
 
     logger.info("Importing app modules...")
@@ -143,6 +143,16 @@ class SimpleMultiSelectFilter(QWidget):
             QApplication.processEvents()
 
         self.update_label()
+
+        # Auto-size width to fit the longest item text
+        fm = QFontMetrics(self.list_widget.font())
+        all_texts = [f"✓ All {self.filtertype}'s"] + [str(i) for i in items_to_use if i and str(i).strip()]
+        max_text_w = max((fm.boundingRect(t).width() for t in all_texts), default=60)
+        # checkbox (~20) + scrollbar (~18) + padding (~20) = 58 extra
+        target_w = max_text_w + 58
+        # Clamp: no narrower than 80, no wider than 300
+        target_w = max(80, min(target_w, 300))
+        self.setFixedWidth(target_w)
 
     def on_item_changed(self, item):
         self.list_widget.blockSignals(True)
@@ -507,53 +517,67 @@ class InventorybyPurposeWindow(QMainWindow):
             filterlabel.setFont(QFont("Arial", 12, QFont.Bold))
             layout.addWidget(filterlabel)
 
-            filtergrid = QGridLayout()
+            filtergrid = QHBoxLayout()
             filtergrid.setSpacing(10)
 
             # Create filters WITHOUT connecting signals yet
             self.strategy_part_filter = self.create_multiselect_dropdown("Select Parts...", "Part")
-            filtergrid.addWidget(self.strategy_part_filter, 0, 0)
+            filtergrid.addWidget(self.strategy_part_filter)
 
             self.strategy_supplier_filter = self.create_multiselect_dropdown("Select Suppliers...", "Supplier")
-            filtergrid.addWidget(self.strategy_supplier_filter, 0, 1)
+            filtergrid.addWidget(self.strategy_supplier_filter)
 
             self.strategy_region_filter = self.create_multiselect_dropdown("Select Regions...", "Region")
-            filtergrid.addWidget(self.strategy_region_filter, 0, 2)
+            filtergrid.addWidget(self.strategy_region_filter)
 
             self.strategy_country_filter = self.create_multiselect_dropdown("Select Countries...", "Country")
-            filtergrid.addWidget(self.strategy_country_filter, 1, 0)
+            filtergrid.addWidget(self.strategy_country_filter)
 
             self.strategy_scc_filter = self.create_multiselect_dropdown("Select SCC...", "SCC")
-            filtergrid.addWidget(self.strategy_scc_filter, 1, 1)
+            filtergrid.addWidget(self.strategy_scc_filter)
 
             clearfilterbtn = QPushButton("Clear Filters")
             clearfilterbtn.clicked.connect(self.clear_strategy_filters)
             clearfilterbtn.setStyleSheet("""QPushButton {background-color: #E97132; color: white; padding: 8px 16px; border: none; border-radius: 5px;} QPushButton:hover {background-color: #da190b;}""")
-            filtergrid.addWidget(clearfilterbtn, 1, 2)
+            clearfilterbtn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+            filtergrid.addWidget(clearfilterbtn)
+            filtergrid.addStretch()
 
             layout.addLayout(filtergrid)
 
-            # 3D Scatter plot - CREATE PLACEHOLDER ONLY
+            # 3D plot and table side by side
+            content_layout = QHBoxLayout()
+            content_layout.setSpacing(10)
+
+            # Left: 3D Scatter plot
+            plot_widget = QWidget()
+            plot_layout = QVBoxLayout(plot_widget)
+            plot_layout.setContentsMargins(0, 0, 0, 0)
             plotlabel = QLabel("3D Scatter Plot: SAFETY vs STOCK vs Price")
             plotlabel.setFont(QFont("Arial", 12, QFont.Bold))
-            layout.addWidget(plotlabel)
-
+            plot_layout.addWidget(plotlabel)
             # Create placeholder for canvas - don't create actual 3D canvas until needed
             self.strategy_canvas_container = QWidget()
             self.strategy_canvas_container_layout = QVBoxLayout(self.strategy_canvas_container)
             self.strategy_canvas = None  # Will be created on first use
             self.strategy_canvas_container_layout.addWidget(QLabel("Click 'Load Analysis Data' to display 3D plot"))
-            layout.addWidget(self.strategy_canvas_container)
+            plot_layout.addWidget(self.strategy_canvas_container)
+            content_layout.addWidget(plot_widget, 3)  # 60% width
 
-            # Table
+            # Right: Table
+            table_widget = QWidget()
+            table_layout = QVBoxLayout(table_widget)
+            table_layout.setContentsMargins(0, 0, 0, 0)
             tablelabel = QLabel("Filtered Parts Data")
             tablelabel.setFont(QFont("Arial", 12, QFont.Bold))
-            layout.addWidget(tablelabel)
-
+            table_layout.addWidget(tablelabel)
             self.strategy_table = QTableWidget()
             self.strategy_table.setSortingEnabled(True)
             self.strategy_table.setStyleSheet("""QTableWidget {gridline-color: #d0d0d0; background-color: white;} QTableWidget::item {padding: 6px; border: 1px solid #d0d0d0;} QHeaderView::section {background-color: #f0f0f0; padding: 8px; border: 1px solid #d0d0d0; font-weight: bold;}""")
-            layout.addWidget(self.strategy_table)
+            table_layout.addWidget(self.strategy_table)
+            content_layout.addWidget(table_widget, 2)  # 40% width
+
+            layout.addLayout(content_layout)
 
             widget.setLayout(layout)
             logger.info("Strategy Analysis tab created successfully")
@@ -625,6 +649,9 @@ class InventorybyPurposeWindow(QMainWindow):
             self.display_top_parts_table(top_parts)
             self.display_top_suppliers_table(top_suppliers)
             self.display_regions_table(regions_value)
+
+            # Display bar chart
+            self.display_tiedup_chart(top_parts, top_suppliers, regions_value)
 
             progress.close()
             QMessageBox.information(self, "Success", "Forecast generated successfully")
@@ -743,6 +770,18 @@ class InventorybyPurposeWindow(QMainWindow):
             return "APAC"
         return 'Other'
 
+    def _fit_table_to_content(self, table):
+        """Resize a QTableWidget to exactly fit its content (no blank space)"""
+        table.resizeColumnsToContents()
+        # Height: horizontal header + all rows
+        header_h = table.horizontalHeader().height()
+        rows_h = sum(table.rowHeight(i) for i in range(table.rowCount()))
+        table.setFixedHeight(header_h + rows_h + 4)
+        # Width: all columns + vertical header
+        total_col_w = sum(table.columnWidth(i) for i in range(table.columnCount()))
+        vheader_w = table.verticalHeader().sizeHint().width()
+        table.setFixedWidth(total_col_w + vheader_w + 4)
+
     def display_top_parts_table(self, df):
         """Display top parts table"""
         if df.empty:
@@ -765,7 +804,7 @@ class InventorybyPurposeWindow(QMainWindow):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 self.tiedup_parts_table.setItem(row, col, item)
 
-        self.tiedup_parts_table.resizeColumnsToContents()
+        self._fit_table_to_content(self.tiedup_parts_table)
 
     def display_top_suppliers_table(self, df):
         """Display top suppliers table"""
@@ -785,7 +824,7 @@ class InventorybyPurposeWindow(QMainWindow):
             valueitem.setFlags(valueitem.flags() & ~Qt.ItemIsEditable)
             self.tiedup_suppliers_table.setItem(row, 1, valueitem)
 
-        self.tiedup_suppliers_table.resizeColumnsToContents()
+        self._fit_table_to_content(self.tiedup_suppliers_table)
 
     def display_regions_table(self, df):
         """Display regions table"""
@@ -805,7 +844,50 @@ class InventorybyPurposeWindow(QMainWindow):
             valueitem.setFlags(valueitem.flags() & ~Qt.ItemIsEditable)
             self.tiedup_regions_table.setItem(row, 1, valueitem)
 
-        self.tiedup_regions_table.resizeColumnsToContents()
+        self._fit_table_to_content(self.tiedup_regions_table)
+
+    def display_tiedup_chart(self, top_parts, top_suppliers, regions_value):
+        """Display a bar chart of top suppliers by tied-up capital value"""
+        try:
+            if self.tiedup_canvas is None:
+                self.tiedup_canvas = FigureCanvas(Figure(figsize=(12, 4), dpi=100))
+                self.tiedup_canvas_container_layout.takeAt(0).widget().deleteLater()
+                self.tiedup_canvas_container_layout.addWidget(self.tiedup_canvas)
+
+            self.tiedup_canvas.figure.clear()
+            fig = self.tiedup_canvas.figure
+
+            df = top_suppliers if not top_suppliers.empty else top_parts
+            if df.empty:
+                logger.warning("display_tiedup_chart: no data to plot")
+                return
+
+            label_col = df.columns[0]
+            value_col = df.columns[1]
+
+            labels = df[label_col].astype(str).values
+            values = pd.to_numeric(df[value_col], errors='coerce').fillna(0).values / 1_000_000
+
+            ax = fig.add_subplot(111)
+            bars = ax.barh(range(len(labels)), values, color='#156082', alpha=0.85)
+            ax.set_yticks(range(len(labels)))
+            ax.set_yticklabels(labels, fontsize=9)
+            ax.invert_yaxis()
+            ax.set_xlabel('Tied-up Capital Value ($ Millions)', fontsize=10)
+            title = 'Top Suppliers by Tied-up Capital' if not top_suppliers.empty else 'Top Parts by Tied-up Capital'
+            ax.set_title(title, fontsize=12, fontweight='bold')
+
+            max_val = max(values) if len(values) else 1
+            for bar, val in zip(bars, values):
+                ax.text(bar.get_width() + max_val * 0.01, bar.get_y() + bar.get_height() / 2,
+                        f'${val:.1f}M', va='center', fontsize=8)
+            ax.margins(x=0.15)
+            fig.tight_layout()
+            self.tiedup_canvas.draw()
+            logger.info("display_tiedup_chart: chart drawn successfully")
+
+        except Exception as e:
+            logger.error(f"Error displaying forecast chart: {e}\n{tb.format_exc()}")
 
     def export_tiedup_tables(self):
         """Export tied-up tables to CSV"""
@@ -1084,6 +1166,7 @@ class InventorybyPurposeWindow(QMainWindow):
     def display_3d_scatterplot(self, df):
         """Display interactive 3D scatter plot"""
         if df.empty:
+            logger.warning("display_3d_scatterplot: dataframe is empty, skipping")
             return
 
         try:
@@ -1092,19 +1175,24 @@ class InventorybyPurposeWindow(QMainWindow):
 
             # Create canvas if it doesn't exist yet
             if self.strategy_canvas is None:
-                self.strategy_canvas = FigureCanvas(Figure(figsize=(10, 6), dpi=100))
+                self.strategy_canvas = FigureCanvas(Figure(figsize=(6, 5), dpi=100))
                 # Replace placeholder with actual canvas
                 self.strategy_canvas_container_layout.takeAt(0).widget().deleteLater()
                 self.strategy_canvas_container_layout.addWidget(self.strategy_canvas)
 
+            # Log available columns for diagnostics
+            logger.info(f"display_3d_scatterplot: df shape={df.shape}, columns={list(df.columns)}")
+
             # Find the actual column names
-            safety_col = next((c for c in df.columns if 'SAFETY' in c), None)
-            stock_col = next((c for c in df.columns if 'STOCK' in c or 'BEGINNING' in c), None)
-            price_col = next((c for c in df.columns if 'PRICE' in c), None)
+            safety_col = next((c for c in df.columns if 'SAFETY' in c.upper()), None)
+            stock_col = next((c for c in df.columns if c.upper() in ('STOCK', 'STOCK_QTY', 'STOCK_VALUE') or ('STOCK' in c.upper() and 'SAFETY' not in c.upper())), None)
+            price_col = next((c for c in df.columns if 'PRICE' in c.upper()), None)
+
+            logger.info(f"display_3d_scatterplot: safety_col={safety_col}, stock_col={stock_col}, price_col={price_col}")
 
             if not all([safety_col, stock_col, price_col]):
                 missing = [n for n, c in [('SAFETY', safety_col), ('STOCK', stock_col), ('PRICE', price_col)] if c is None]
-                print(f"Cannot plot 3D: Missing columns {missing}. Available: {list(df.columns)}")
+                logger.error(f"Cannot plot 3D: Missing columns {missing}. Available: {list(df.columns)}")
                 self.strategy_canvas.figure.clear()
                 ax = self.strategy_canvas.figure.add_subplot(111)
                 ax.text(0.5, 0.5, f'Missing columns: {missing}', ha='center', va='center', transform=ax.transAxes)
@@ -1115,25 +1203,26 @@ class InventorybyPurposeWindow(QMainWindow):
             ax = self.strategy_canvas.figure.add_subplot(111, projection='3d')
 
             # Extract data
-            safety = df[safety_col].fillna(0).astype(float).values
-            stock = df[stock_col].fillna(0).astype(float).values
-            price = df[price_col].fillna(0).astype(float).values
+            safety = pd.to_numeric(df[safety_col], errors='coerce').fillna(0).values
+            stock = pd.to_numeric(df[stock_col], errors='coerce').fillna(0).values
+            price = pd.to_numeric(df[price_col], errors='coerce').fillna(0).values
+
+            logger.info(f"display_3d_scatterplot: plotting {len(safety)} points, safety range [{safety.min():.2f}, {safety.max():.2f}]")
 
             # Create scatter plot
             scatter = ax.scatter(safety, stock, price, c=price, cmap='viridis', marker='o', s=50, alpha=0.6)
 
-            ax.set_xlabel('SAFETY', fontsize=10)
-            ax.set_ylabel('STOCK', fontsize=10)
-            ax.set_zlabel('Price', fontsize=10)
-            ax.set_title('3D Strategy Analysis', fontsize=12, fontweight='bold')
+            ax.set_xlabel('SAFETY', fontsize=9)
+            ax.set_ylabel('STOCK', fontsize=9)
+            ax.set_zlabel('Price', fontsize=9)
+            ax.set_title('3D Strategy Analysis', fontsize=11, fontweight='bold')
 
-            self.strategy_canvas.figure.colorbar(scatter, ax=ax, label='Price')
+            self.strategy_canvas.figure.colorbar(scatter, ax=ax, shrink=0.6, label='Price')
             self.strategy_canvas.draw()
+            logger.info("display_3d_scatterplot: draw complete")
 
         except Exception as e:
-            print(f"Error displaying 3D plot: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Error displaying 3D plot: {e}\n{tb.format_exc()}")
 
     def display_strategy_table(self, df):
         """Display strategy analysis table"""
@@ -1146,8 +1235,8 @@ class InventorybyPurposeWindow(QMainWindow):
             part_col = next((c for c in df.columns if c in ['PART', 'PART_NO', 'PART_NUMBER']), None)
             desc_col = next((c for c in df.columns if 'DESC' in c), None)
             supp_col = next((c for c in df.columns if 'SUPP' in c and 'NAME' in c), None)
-            safety_col = next((c for c in df.columns if 'SAFETY' in c), None)
-            stock_col = next((c for c in df.columns if 'STOCK' in c or 'BEGINNING' in c), None)
+            safety_col = next((c for c in df.columns if 'SAFETY' in c.upper()), None)
+            stock_col = next((c for c in df.columns if c.upper() in ('STOCK', 'STOCK_QTY', 'STOCK_VALUE') or ('STOCK' in c.upper() and 'SAFETY' not in c.upper())), None)
 
             # Build column list from what's available
             cols = []
