@@ -278,8 +278,11 @@ class InventorybyPurposeWindow(QMainWindow):
             self._mc_progress_dialog = None
 
             self.setWindowTitle("Inventory by Purpose Application")
+            logger.info("setWindowTitle OK")
             self.resize(*APPWINDOWSIZE)
-            self.setAttribute(Qt.WA_DeleteOnClose)  # Ensure native handle is destroyed on close
+            logger.info("resize OK")
+            self.setAttribute(Qt.WA_DeleteOnClose)
+            logger.info("setAttribute OK")
 
             logger.info("Setting up UI...")
             self.setupui()
