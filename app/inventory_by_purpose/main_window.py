@@ -38,7 +38,7 @@ try:
         QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame,
         QApplication, QLineEdit, QGridLayout, QProgressDialog, QSpinBox, QSizePolicy
     )
-    from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+    from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QEvent
     from PyQt5.QtGui import QFont, QColor, QFontMetrics
     logger.info("PyQt5 imported successfully")
 
@@ -77,6 +77,51 @@ except Exception as e:
     except:
         pass
     raise
+
+
+class MCSimThread(QThread):
+    """Background thread for the Monte Carlo tied-up capital simulation"""
+    progress = pyqtSignal(int, str)   # (percent 0-100, status label)
+    finished = pyqtSignal(object)     # forecast_result dict, or None on skip/cancel
+    error    = pyqtSignal(str)        # error message
+
+    def __init__(self, import_manager, days: int = 90, n_sims: int = 50):
+        super().__init__()
+        self.import_manager = import_manager
+        self.days = days
+        self.n_sims = n_sims
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def run(self):
+        try:
+            if not MONTE_CARLO_AVAILABLE or monte_tuc_sim is None:
+                logger.warning("MCSimThread: Monte Carlo module unavailable")
+                self.finished.emit(None)
+                return
+
+            self.progress.emit(10, "Loading simulation data...")
+            mc_data = monte_tuc_sim.load_required_data(self.import_manager)
+            logger.info("MCSimThread: data loaded")
+
+            if self._cancelled:
+                logger.info("MCSimThread: cancelled before simulation started")
+                self.finished.emit(None)
+                return
+
+            self.progress.emit(30, "Running Monte Carlo simulation\n(this may take several minutes)...")
+            forecast_result = monte_tuc_sim.plant_forecast_shared_pva(
+                self.days, mc_data, n_sims=self.n_sims
+            )
+            logger.info("MCSimThread: simulation complete")
+            self.progress.emit(95, "Preparing chart...")
+            self.finished.emit(forecast_result)
+
+        except Exception as e:
+            logger.error(f"MCSimThread error: {e}\n{tb.format_exc()}")
+            self.error.emit(str(e))
 
 
 class SimpleMultiSelectFilter(QWidget):
@@ -228,8 +273,13 @@ class InventorybyPurposeWindow(QMainWindow):
             self._current_inventory = None
             self._mc_results = None
 
+            # MC simulation thread state
+            self._mc_thread = None
+            self._mc_progress_dialog = None
+
             self.setWindowTitle("Inventory by Purpose Application")
             self.resize(*APPWINDOWSIZE)
+            self.setAttribute(Qt.WA_DeleteOnClose)  # Ensure native handle is destroyed on close
 
             logger.info("Setting up UI...")
             self.setupui()
@@ -634,37 +684,88 @@ class InventorybyPurposeWindow(QMainWindow):
             return False, str(e)
 
     def generate_tiedup_forecast(self):
-        """Generate tied-up capital forecast using Monte Carlo"""
+        """Generate tied-up capital forecast using Monte Carlo (QThread)"""
         success, message = self.load_required_data()
         if not success:
             QMessageBox.warning(self, "Missing Data", message)
             return
 
+        # Prevent double-launch
+        if self._mc_thread is not None and self._mc_thread.isRunning():
+            QMessageBox.information(self, "In Progress", "Simulation is already running.")
+            return
+
         try:
-            progress = QProgressDialog("Running Monte Carlo simulation...", "Cancel", 0, 100, self)
-            progress.setWindowTitle("Processing")
-            progress.setValue(50)
+            # Fast part on main thread: compute + display summary tables
+            progress = QProgressDialog("Computing inventory values...", "Cancel", 0, 100, self)
+            progress.setWindowTitle("Generating Forecast")
+            progress.setMinimumDuration(0)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setValue(5)
             progress.show()
             QApplication.processEvents()
 
-            # Get top parts, suppliers, and regions by value
             top_parts = self.compute_top_parts_by_value()
             top_suppliers = self.compute_top_suppliers_by_value()
             regions_value = self.compute_regions_by_value()
-
-            # Display tables
             self.display_top_parts_table(top_parts)
             self.display_top_suppliers_table(top_suppliers)
             self.display_regions_table(regions_value)
+            progress.setValue(25)
+            QApplication.processEvents()
 
-            # Display bar chart
-            self.display_tiedup_chart(top_parts, top_suppliers, regions_value)
-
-            progress.close()
-            QMessageBox.information(self, "Success", "Forecast generated successfully")
+            # Slow part: MC simulation on background thread
+            self._mc_progress_dialog = progress
+            self._mc_thread = MCSimThread(self.import_manager, days=90, n_sims=50)
+            self._mc_thread.progress.connect(self._on_mc_progress)
+            self._mc_thread.finished.connect(self._on_mc_finished)
+            self._mc_thread.error.connect(self._on_mc_error)
+            progress.canceled.connect(self._on_mc_cancel)
+            self._mc_thread.start()
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Forecast generation failed: {str(e)}")
+
+    def _on_mc_progress(self, value: int, message: str):
+        """Slot: update progress dialog from MC thread"""
+        if self._mc_progress_dialog is not None:
+            self._mc_progress_dialog.setValue(value)
+            self._mc_progress_dialog.setLabelText(message)
+
+    def _on_mc_finished(self, forecast_result):
+        """Slot: MC thread completed (forecast_result may be None)"""
+        if self._mc_progress_dialog is not None:
+            self._mc_progress_dialog.close()
+            self._mc_progress_dialog = None
+        self.display_mc_chart(forecast_result=forecast_result)
+        if forecast_result is not None:
+            QMessageBox.information(self, "Success", "Forecast generated successfully")
+        else:
+            QMessageBox.information(
+                self, "Complete",
+                "Summary tables generated.\n"
+                "Monte Carlo was unavailable or cancelled — chart shows historical data only."
+            )
+
+    def _on_mc_error(self, error_msg: str):
+        """Slot: MC thread hit an unhandled exception"""
+        if self._mc_progress_dialog is not None:
+            self._mc_progress_dialog.close()
+            self._mc_progress_dialog = None
+        logger.warning(f"MC simulation failed: {error_msg}")
+        self.display_mc_chart(forecast_result=None)
+        QMessageBox.warning(
+            self, "Simulation Warning",
+            f"Monte Carlo simulation failed:\n{error_msg}\n\n"
+            "Chart shows historical data only."
+        )
+
+    def _on_mc_cancel(self):
+        """Slot: user clicked Cancel on the progress dialog"""
+        if self._mc_thread is not None and self._mc_thread.isRunning():
+            logger.info("MC simulation cancel requested by user")
+            self._mc_thread.cancel()
+            # Thread will emit finished(None) once the current work unit completes
 
     def compute_top_parts_by_value(self):
         """Compute top 10 parts by value"""
@@ -853,8 +954,8 @@ class InventorybyPurposeWindow(QMainWindow):
 
         self._fit_table_to_content(self.tiedup_regions_table)
 
-    def display_tiedup_chart(self, top_parts, top_suppliers, regions_value):
-        """Display a bar chart of top suppliers by tied-up capital value"""
+    def display_mc_chart(self, forecast_result=None):
+        """Display Monte Carlo historical archive + forecast time-series chart"""
         try:
             if self.tiedup_canvas is None:
                 self.tiedup_canvas = FigureCanvas(Figure(figsize=(12, 4), dpi=100))
@@ -863,38 +964,63 @@ class InventorybyPurposeWindow(QMainWindow):
 
             self.tiedup_canvas.figure.clear()
             fig = self.tiedup_canvas.figure
-
-            df = top_suppliers if not top_suppliers.empty else top_parts
-            if df.empty:
-                logger.warning("display_tiedup_chart: no data to plot")
-                return
-
-            label_col = df.columns[0]
-            value_col = df.columns[1]
-
-            labels = df[label_col].astype(str).values
-            values = pd.to_numeric(df[value_col], errors='coerce').fillna(0).values / 1_000_000
-
             ax = fig.add_subplot(111)
-            bars = ax.barh(range(len(labels)), values, color='#156082', alpha=0.85)
-            ax.set_yticks(range(len(labels)))
-            ax.set_yticklabels(labels, fontsize=9)
-            ax.invert_yaxis()
-            ax.set_xlabel('Tied-up Capital Value ($ Millions)', fontsize=10)
-            title = 'Top Suppliers by Tied-up Capital' if not top_suppliers.empty else 'Top Parts by Tied-up Capital'
-            ax.set_title(title, fontsize=12, fontweight='bold')
+            has_data = False
 
-            max_val = max(values) if len(values) else 1
-            for bar, val in zip(bars, values):
-                ax.text(bar.get_width() + max_val * 0.01, bar.get_y() + bar.get_height() / 2,
-                        f'${val:.1f}M', va='center', fontsize=8)
-            ax.margins(x=0.15)
+            # ── Historical archive ────────────────────────────────────────────
+            try:
+                archive_path = getsharednetworkpath() / "archive" / "Inventory_Archive.csv"
+                if archive_path.exists():
+                    arc = (pd.read_csv(archive_path, parse_dates=["date"])
+                           .dropna(subset=["date", "total_value"])
+                           .sort_values("date"))
+                    if not arc.empty:
+                        ax.plot(arc["date"], arc["total_value"] / 1e6,
+                                color="darkgreen", lw=2, label="Historical")
+                        has_data = True
+                        logger.info(f"display_mc_chart: plotted {len(arc)} historical days")
+            except Exception as e:
+                logger.warning(f"Could not load historical archive: {e}")
+
+            # ── Monte Carlo forecast ──────────────────────────────────────────
+            if forecast_result is not None:
+                try:
+                    fc_vals = np.array(forecast_result["plant_trajectory"][1:])
+                    fc_dates = pd.date_range(
+                        pd.Timestamp.today() + pd.Timedelta(days=1),
+                        periods=len(fc_vals), freq="D"
+                    )
+                    ax.plot(fc_dates, fc_vals / 1e6,
+                            color="royalblue", lw=2, label="MC Forecast (90-day)")
+                    has_data = True
+                    logger.info(f"display_mc_chart: plotted {len(fc_vals)}-day MC forecast")
+                except Exception as e:
+                    logger.warning(f"Could not plot MC forecast: {e}")
+
+            ax.set_title("Tied-Up Capital — Historical & Forecast",
+                         fontsize=12, fontweight="bold")
+            if has_data:
+                ax.axvline(pd.Timestamp.today(), color="red", ls="--", lw=1.5, label="Today")
+                ax.set_ylabel("Value ($M)", fontsize=10)
+                ax.yaxis.set_major_formatter(
+                    plt.FuncFormatter(lambda v, _: f"${v:.1f}M"))
+                ax.tick_params(axis="x", rotation=25)
+                ax.legend(fontsize=9)
+                ax.grid(True, alpha=0.3)
+            else:
+                ax.text(0.5, 0.5,
+                        "No historical archive found.\n"
+                        "Ensure the shared network archive CSV exists\n"
+                        "at: archive/Inventory_Archive.csv",
+                        ha="center", va="center", transform=ax.transAxes,
+                        fontsize=11, color="gray")
+
             fig.tight_layout()
             self.tiedup_canvas.draw()
-            logger.info("display_tiedup_chart: chart drawn successfully")
+            logger.info("display_mc_chart: draw complete")
 
         except Exception as e:
-            logger.error(f"Error displaying forecast chart: {e}\n{tb.format_exc()}")
+            logger.error(f"Error displaying MC chart: {e}\n{tb.format_exc()}")
 
     def export_tiedup_tables(self):
         """Export tied-up tables to CSV"""
@@ -1314,6 +1440,23 @@ class InventorybyPurposeWindow(QMainWindow):
         reply = QMessageBox.question(self, "Exit", "Are you sure you want to exit?",
                                      QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
+            # Stop MC thread cleanly if still running
+            if self._mc_thread is not None and self._mc_thread.isRunning():
+                self._mc_thread.cancel()
+                self._mc_thread.wait(5000)          # give it 5 s to finish gracefully
+                if self._mc_thread.isRunning():
+                    self._mc_thread.terminate()     # force-kill if still stuck
+                    self._mc_thread.wait()
+            # Hide immediately so the OS redraws the area before native handle cleanup,
+            # preventing the ghost title bar artifact on Windows
+            self.hide()
+            QApplication.processEvents()
             event.accept()
         else:
             event.ignore()
+
+    def changeEvent(self, event):
+        """Repaint on screen or DPI changes to prevent rendering artifacts"""
+        super().changeEvent(event)
+        if event.type() in (QEvent.ScreenChangeInternal, QEvent.WindowStateChange):
+            self.repaint()

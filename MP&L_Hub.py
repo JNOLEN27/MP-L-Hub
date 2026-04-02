@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import multiprocessing
 
 def ensure_dependencies():
     requiredpackages = ['PyQt5','bcrypt', 'pandas','numpy']
@@ -25,6 +26,7 @@ def ensure_dependencies():
     return True
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()  # Required for ProcessPoolExecutor in frozen exe
     print("Checking dependencies...")
     if ensure_dependencies():
         print("All dependencies ready!")
