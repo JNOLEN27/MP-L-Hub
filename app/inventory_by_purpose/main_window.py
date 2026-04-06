@@ -79,49 +79,67 @@ except Exception as e:
     raise
 
 
-class MCSimThread(QThread):
-    """Background thread for the Monte Carlo tied-up capital simulation"""
-    progress = pyqtSignal(int, str)   # (percent 0-100, status label)
-    finished = pyqtSignal(dict)       # forecast_result dict, or {} on skip/cancel
-    error    = pyqtSignal(str)        # error message
+# MCSimThread is built lazily on first use so that PyQt5's metaclass does NOT
+# register the QThread subclass with Qt's type system at module-import time.
+# Defining QObject subclasses with pyqtSignal at module level causes Qt to
+# register meta-types before the native platform plugin is ready, leading to
+# a stack buffer overrun (0xc0000409) in Qt5Core.dll on the first native Qt
+# call (setWindowTitle / resize).  Deferring class creation until after the
+# window is visible avoids this entirely.
+_MC_SIM_THREAD_CLASS = None
 
-    def __init__(self, import_manager, days: int = 90, n_sims: int = 50):
-        super().__init__()
-        self.import_manager = import_manager
-        self.days = days
-        self.n_sims = n_sims
-        self._cancelled = False
+def _get_mc_sim_thread_class():
+    """Return the MCSimThread class, creating it on first call."""
+    global _MC_SIM_THREAD_CLASS
+    if _MC_SIM_THREAD_CLASS is not None:
+        return _MC_SIM_THREAD_CLASS
 
-    def cancel(self):
-        self._cancelled = True
+    class MCSimThread(QThread):
+        """Background thread for the Monte Carlo tied-up capital simulation"""
+        progress = pyqtSignal(int, str)   # (percent 0-100, status label)
+        finished = pyqtSignal(dict)       # forecast_result dict, or {} on skip/cancel
+        error    = pyqtSignal(str)        # error message
 
-    def run(self):
-        try:
-            if not MONTE_CARLO_AVAILABLE or monte_tuc_sim is None:
-                logger.warning("MCSimThread: Monte Carlo module unavailable")
-                self.finished.emit({})
-                return
+        def __init__(self, import_manager, days: int = 90, n_sims: int = 50):
+            super().__init__()
+            self.import_manager = import_manager
+            self.days = days
+            self.n_sims = n_sims
+            self._cancelled = False
 
-            self.progress.emit(10, "Loading simulation data...")
-            mc_data = monte_tuc_sim.load_required_data(self.import_manager)
-            logger.info("MCSimThread: data loaded")
+        def cancel(self):
+            self._cancelled = True
 
-            if self._cancelled:
-                logger.info("MCSimThread: cancelled before simulation started")
-                self.finished.emit({})
-                return
+        def run(self):
+            try:
+                if not MONTE_CARLO_AVAILABLE or monte_tuc_sim is None:
+                    logger.warning("MCSimThread: Monte Carlo module unavailable")
+                    self.finished.emit({})
+                    return
 
-            self.progress.emit(30, "Running Monte Carlo simulation\n(this may take several minutes)...")
-            forecast_result = monte_tuc_sim.plant_forecast_shared_pva(
-                self.days, mc_data, n_sims=self.n_sims
-            )
-            logger.info("MCSimThread: simulation complete")
-            self.progress.emit(95, "Preparing chart...")
-            self.finished.emit(forecast_result)
+                self.progress.emit(10, "Loading simulation data...")
+                mc_data = monte_tuc_sim.load_required_data(self.import_manager)
+                logger.info("MCSimThread: data loaded")
 
-        except Exception as e:
-            logger.error(f"MCSimThread error: {e}\n{tb.format_exc()}")
-            self.error.emit(str(e))
+                if self._cancelled:
+                    logger.info("MCSimThread: cancelled before simulation started")
+                    self.finished.emit({})
+                    return
+
+                self.progress.emit(30, "Running Monte Carlo simulation\n(this may take several minutes)...")
+                forecast_result = monte_tuc_sim.plant_forecast_shared_pva(
+                    self.days, mc_data, n_sims=self.n_sims
+                )
+                logger.info("MCSimThread: simulation complete")
+                self.progress.emit(95, "Preparing chart...")
+                self.finished.emit(forecast_result)
+
+            except Exception as e:
+                logger.error(f"MCSimThread error: {e}\n{tb.format_exc()}")
+                self.error.emit(str(e))
+
+    _MC_SIM_THREAD_CLASS = MCSimThread
+    return _MC_SIM_THREAD_CLASS
 
 
 class SimpleMultiSelectFilter(QWidget):
@@ -719,6 +737,7 @@ class InventorybyPurposeWindow(QMainWindow):
 
             # Slow part: MC simulation on background thread
             self._mc_progress_dialog = progress
+            MCSimThread = _get_mc_sim_thread_class()
             self._mc_thread = MCSimThread(self.import_manager, days=90, n_sims=50)
             self._mc_thread.progress.connect(self._on_mc_progress)
             self._mc_thread.finished.connect(self._on_mc_finished)
