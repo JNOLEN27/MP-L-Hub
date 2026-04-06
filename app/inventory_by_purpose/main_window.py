@@ -267,22 +267,27 @@ class SimpleMultiSelectFilter(QWidget):
 class InventorybyPurposeWindow(QMainWindow):
     def __init__(self, userdata, parent=None):
         super().__init__(parent)
+        def _flush():
+            for h in logging.root.handlers:
+                try: h.flush()
+                except Exception: pass
+
         try:
-            logger.info("=== Initializing InventorybyPurposeWindow ===")
+            logger.info("=== Initializing InventorybyPurposeWindow ==="); _flush()
             self.userdata = userdata
-            logger.info(f"User data loaded: {userdata.get('username', 'unknown')}")
+            logger.info(f"User data loaded: {userdata.get('username', 'unknown')}"); _flush()
 
-            logger.info("Initializing DataImportManager...")
+            logger.info("Initializing DataImportManager..."); _flush()
             self.import_manager = DataImportManager()
-            logger.info("DataImportManager initialized successfully")
+            logger.info("DataImportManager initialized successfully"); _flush()
 
-            logger.info("Initializing InventorybyPurposeNeuralNetwork...")
+            logger.info("Initializing InventorybyPurposeNeuralNetwork..."); _flush()
             if TORCH_AVAILABLE and InventorybyPurposeNeuralNetwork is not None:
                 self.nn_engine = InventorybyPurposeNeuralNetwork(self.import_manager)
-                logger.info("Neural network engine initialized successfully")
+                logger.info("Neural network engine initialized successfully"); _flush()
             else:
                 self.nn_engine = None
-                logger.warning("Neural network engine unavailable (torch not installed)")
+                logger.warning("Neural network engine unavailable (torch not installed)"); _flush()
 
             # Cache for data
             self._master_data = None
@@ -292,17 +297,18 @@ class InventorybyPurposeWindow(QMainWindow):
             # MC simulation thread state
             self._mc_thread = None
             self._mc_progress_dialog = None
+            logger.info("Attributes set, calling setWindowTitle..."); _flush()
 
             self.setWindowTitle("Inventory by Purpose Application")
-            logger.info("setWindowTitle OK")
+            logger.info("setWindowTitle OK"); _flush()
             self.resize(*APPWINDOWSIZE)
-            logger.info("resize OK")
+            logger.info("resize OK"); _flush()
             self.setAttribute(Qt.WA_DeleteOnClose)
-            logger.info("setAttribute OK")
+            logger.info("setAttribute OK"); _flush()
 
-            logger.info("Setting up UI...")
+            logger.info("Setting up UI..."); _flush()
             self.setupui()
-            logger.info("UI setup completed successfully")
+            logger.info("UI setup completed successfully"); _flush()
 
         except Exception as e:
             error_msg = f"CRITICAL ERROR in InventorybyPurposeWindow.__init__: {str(e)}\n{tb.format_exc()}"
@@ -318,9 +324,14 @@ class InventorybyPurposeWindow(QMainWindow):
 
     def setupui(self):
         """Setup main UI structure"""
+        def _flush():
+            for h in logging.root.handlers:
+                try: h.flush()
+                except Exception: pass
         try:
-            logger.info("Starting setupui...")
+            logger.info("Starting setupui..."); _flush()
             centralwidget = QWidget()
+            logger.info("centralwidget created"); _flush()
             self.setCentralWidget(centralwidget)
 
             centralwidget.setStyleSheet("QWidget#centralwidget { background-color: #156082; }")
