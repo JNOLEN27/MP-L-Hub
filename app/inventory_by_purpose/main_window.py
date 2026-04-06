@@ -23,14 +23,6 @@ logger = logging.getLogger(__name__)
 logger.info("=== Starting imports for InventorybyPurposeWindow ===")
 
 try:
-    # DEFER matplotlib 3D import until needed - can cause Qt crashes on some systems
-    # from mpl_toolkits.mplot3d import Axes3D
-    logger.info("Importing matplotlib...")
-    import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-    from matplotlib.figure import Figure
-    logger.info("Matplotlib imported successfully")
-
     logger.info("Importing PyQt5...")
     from PyQt5.QtWidgets import (
         QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -1004,6 +996,9 @@ class InventorybyPurposeWindow(QMainWindow):
     def display_mc_chart(self, forecast_result=None):
         """Display Monte Carlo historical archive + forecast time-series chart"""
         try:
+            import matplotlib.pyplot as plt
+            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+            from matplotlib.figure import Figure
             if self.tiedup_canvas is None:
                 self.tiedup_canvas = FigureCanvas(Figure(figsize=(12, 4), dpi=100))
                 self.tiedup_canvas_container_layout.takeAt(0).widget().deleteLater()
@@ -1350,7 +1345,10 @@ class InventorybyPurposeWindow(QMainWindow):
             return
 
         try:
-            # Import 3D modules only when needed (late binding)
+            # Import matplotlib modules only when needed (late binding avoids
+            # module-level QWidget registration that crashes Qt in frozen EXE)
+            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+            from matplotlib.figure import Figure
             from mpl_toolkits.mplot3d import Axes3D
 
             # Create canvas if it doesn't exist yet
