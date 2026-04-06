@@ -82,7 +82,7 @@ except Exception as e:
 class MCSimThread(QThread):
     """Background thread for the Monte Carlo tied-up capital simulation"""
     progress = pyqtSignal(int, str)   # (percent 0-100, status label)
-    finished = pyqtSignal(object)     # forecast_result dict, or None on skip/cancel
+    finished = pyqtSignal(dict)       # forecast_result dict, or {} on skip/cancel
     error    = pyqtSignal(str)        # error message
 
     def __init__(self, import_manager, days: int = 90, n_sims: int = 50):
@@ -99,7 +99,7 @@ class MCSimThread(QThread):
         try:
             if not MONTE_CARLO_AVAILABLE or monte_tuc_sim is None:
                 logger.warning("MCSimThread: Monte Carlo module unavailable")
-                self.finished.emit(None)
+                self.finished.emit({})
                 return
 
             self.progress.emit(10, "Loading simulation data...")
@@ -108,7 +108,7 @@ class MCSimThread(QThread):
 
             if self._cancelled:
                 logger.info("MCSimThread: cancelled before simulation started")
-                self.finished.emit(None)
+                self.finished.emit({})
                 return
 
             self.progress.emit(30, "Running Monte Carlo simulation\n(this may take several minutes)...")
@@ -735,13 +735,13 @@ class InventorybyPurposeWindow(QMainWindow):
             self._mc_progress_dialog.setValue(value)
             self._mc_progress_dialog.setLabelText(message)
 
-    def _on_mc_finished(self, forecast_result):
-        """Slot: MC thread completed (forecast_result may be None)"""
+    def _on_mc_finished(self, forecast_result: dict):
+        """Slot: MC thread completed (empty dict means skipped/cancelled)"""
         if self._mc_progress_dialog is not None:
             self._mc_progress_dialog.close()
             self._mc_progress_dialog = None
         self.display_mc_chart(forecast_result=forecast_result)
-        if forecast_result is not None:
+        if forecast_result:
             QMessageBox.information(self, "Success", "Forecast generated successfully")
         else:
             QMessageBox.information(
@@ -986,7 +986,7 @@ class InventorybyPurposeWindow(QMainWindow):
                 logger.warning(f"Could not load historical archive: {e}")
 
             # ── Monte Carlo forecast ──────────────────────────────────────────
-            if forecast_result is not None:
+            if forecast_result:
                 try:
                     fc_vals = np.array(forecast_result["plant_trajectory"][1:])
                     fc_dates = pd.date_range(
