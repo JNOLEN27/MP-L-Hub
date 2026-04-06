@@ -140,128 +140,144 @@ def _get_mc_sim_thread_class():
     return _MC_SIM_THREAD_CLASS
 
 
-class SimpleMultiSelectFilter(QWidget):
-    """Reusable multi-select filter widget"""
-    selectionChanged = pyqtSignal()
+# SimpleMultiSelectFilter is also defined lazily for the same reason as
+# MCSimThread: a module-level QWidget subclass with pyqtSignal() causes
+# Qt's meta-type system to register the signal BEFORE the native platform
+# plugin is ready in a frozen PyInstaller EXE, corrupting the QMetaObject
+# table and crashing on the first real Qt call (setWindowTitle).
+_SIMPLE_FILTER_CLASS = None
 
-    def __init__(self, placeholder="Select items...", filtertype="Item"):
-        super().__init__()
-        self.filtertype = filtertype
-        self.setFixedHeight(170)
+def _get_simple_filter_class():
+    """Return SimpleMultiSelectFilter class, creating it on first call."""
+    global _SIMPLE_FILTER_CLASS
+    if _SIMPLE_FILTER_CLASS is not None:
+        return _SIMPLE_FILTER_CLASS
 
-        layout = QVBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
+    class SimpleMultiSelectFilter(QWidget):
+        """Reusable multi-select filter widget"""
+        selectionChanged = pyqtSignal()
 
-        self.label = QLabel(f"{filtertype} Filter:")
-        self.label.setFont(QFont("Arial", 10, QFont.Bold))
-        layout.addWidget(self.label)
+        def __init__(self, placeholder="Select items...", filtertype="Item"):
+            super().__init__()
+            self.filtertype = filtertype
+            self.setFixedHeight(170)
 
-        self.list_widget = QListWidget()
-        self.list_widget.setMaximumHeight(150)
-        self.list_widget.itemChanged.connect(self.on_item_changed)
-        self.list_widget.setStyleSheet("""
-            QListWidget {
-                border: 1px solid #ccc;
-                font-size: 11px;
-            }
-            QListWidget::item {
-                padding: 2px;
-            }
-        """)
-        layout.addWidget(self.list_widget)
+            layout = QVBoxLayout()
+            layout.setContentsMargins(5, 5, 5, 5)
 
-        self.setLayout(layout)
-        self.selected_items = set()
-        self.all_items = []
+            self.label = QLabel(f"{filtertype} Filter:")
+            self.label.setFont(QFont("Arial", 10, QFont.Bold))
+            layout.addWidget(self.label)
 
-    def additems(self, items, presorted=False):
-        self.list_widget.clear()
-        self.selected_items.clear()
-        self.all_items.clear()
+            self.list_widget = QListWidget()
+            self.list_widget.setMaximumHeight(150)
+            self.list_widget.itemChanged.connect(self.on_item_changed)
+            self.list_widget.setStyleSheet("""
+                QListWidget {
+                    border: 1px solid #ccc;
+                    font-size: 11px;
+                }
+                QListWidget::item {
+                    padding: 2px;
+                }
+            """)
+            layout.addWidget(self.list_widget)
 
-        select_all_item = QListWidgetItem(f"✓ All {self.filtertype}'s")
-        select_all_item.setFlags(select_all_item.flags() | Qt.ItemIsUserCheckable)
-        select_all_item.setCheckState(Qt.Checked)
-        select_all_item.setData(Qt.UserRole, "SELECT_ALL")
-        select_all_item.setFont(QFont("Arial", 9, QFont.Bold))
-        self.list_widget.addItem(select_all_item)
+            self.setLayout(layout)
+            self.selected_items = set()
+            self.all_items = []
 
-        items_to_use = items if presorted else sorted(items)
+        def additems(self, items, presorted=False):
+            self.list_widget.clear()
+            self.selected_items.clear()
+            self.all_items.clear()
 
-        # Batch add items to prevent stack overflow with large lists
-        BATCH_SIZE = 100
-        for batch_start in range(0, len(items_to_use), BATCH_SIZE):
-            batch = items_to_use[batch_start:batch_start + BATCH_SIZE]
-            for item in batch:
-                if item and str(item).strip():
-                    list_item = QListWidgetItem(str(item))
-                    list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
-                    list_item.setCheckState(Qt.Checked)
-                    self.list_widget.addItem(list_item)
-                    self.selected_items.add(str(item))
-                    self.all_items.append(str(item))
-            # Process events to prevent UI freezing
-            QApplication.processEvents()
+            select_all_item = QListWidgetItem(f"✓ All {self.filtertype}'s")
+            select_all_item.setFlags(select_all_item.flags() | Qt.ItemIsUserCheckable)
+            select_all_item.setCheckState(Qt.Checked)
+            select_all_item.setData(Qt.UserRole, "SELECT_ALL")
+            select_all_item.setFont(QFont("Arial", 9, QFont.Bold))
+            self.list_widget.addItem(select_all_item)
 
-        self.update_label()
+            items_to_use = items if presorted else sorted(items)
 
-        # Auto-size width to fit the longest item text
-        fm = QFontMetrics(self.list_widget.font())
-        all_texts = [f"✓ All {self.filtertype}'s"] + [str(i) for i in items_to_use if i and str(i).strip()]
-        max_text_w = max((fm.boundingRect(t).width() for t in all_texts), default=60)
-        # checkbox (~20) + scrollbar (~18) + padding (~20) = 58 extra
-        target_w = max_text_w + 58
-        # Clamp: no narrower than 80, no wider than 300
-        target_w = max(80, min(target_w, 300))
-        self.setFixedWidth(target_w)
+            # Batch add items to prevent stack overflow with large lists
+            BATCH_SIZE = 100
+            for batch_start in range(0, len(items_to_use), BATCH_SIZE):
+                batch = items_to_use[batch_start:batch_start + BATCH_SIZE]
+                for item in batch:
+                    if item and str(item).strip():
+                        list_item = QListWidgetItem(str(item))
+                        list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
+                        list_item.setCheckState(Qt.Checked)
+                        self.list_widget.addItem(list_item)
+                        self.selected_items.add(str(item))
+                        self.all_items.append(str(item))
+                # Process events to prevent UI freezing
+                QApplication.processEvents()
 
-    def on_item_changed(self, item):
-        self.list_widget.blockSignals(True)
+            self.update_label()
 
-        try:
-            if item.data(Qt.UserRole) == "SELECT_ALL":
-                if item.checkState() == Qt.Checked:
-                    for i in range(1, self.list_widget.count()):
-                        other_item = self.list_widget.item(i)
-                        other_item.setCheckState(Qt.Checked)
-                        self.selected_items.add(other_item.text())
+            # Auto-size width to fit the longest item text
+            fm = QFontMetrics(self.list_widget.font())
+            all_texts = [f"✓ All {self.filtertype}'s"] + [str(i) for i in items_to_use if i and str(i).strip()]
+            max_text_w = max((fm.boundingRect(t).width() for t in all_texts), default=60)
+            # checkbox (~20) + scrollbar (~18) + padding (~20) = 58 extra
+            target_w = max_text_w + 58
+            # Clamp: no narrower than 80, no wider than 300
+            target_w = max(80, min(target_w, 300))
+            self.setFixedWidth(target_w)
+
+        def on_item_changed(self, item):
+            self.list_widget.blockSignals(True)
+
+            try:
+                if item.data(Qt.UserRole) == "SELECT_ALL":
+                    if item.checkState() == Qt.Checked:
+                        for i in range(1, self.list_widget.count()):
+                            other_item = self.list_widget.item(i)
+                            other_item.setCheckState(Qt.Checked)
+                            self.selected_items.add(other_item.text())
+                    else:
+                        for i in range(1, self.list_widget.count()):
+                            other_item = self.list_widget.item(i)
+                            other_item.setCheckState(Qt.Unchecked)
+                        self.selected_items.clear()
                 else:
-                    for i in range(1, self.list_widget.count()):
-                        other_item = self.list_widget.item(i)
-                        other_item.setCheckState(Qt.Unchecked)
-                    self.selected_items.clear()
-            else:
-                if item.checkState() == Qt.Checked:
-                    self.selected_items.add(item.text())
-                else:
-                    self.selected_items.discard(item.text())
-                    select_all_item = self.list_widget.item(0)
-                    select_all_item.setCheckState(Qt.Unchecked)
+                    if item.checkState() == Qt.Checked:
+                        self.selected_items.add(item.text())
+                    else:
+                        self.selected_items.discard(item.text())
+                        select_all_item = self.list_widget.item(0)
+                        select_all_item.setCheckState(Qt.Unchecked)
 
-                if len(self.selected_items) == len(self.all_items):
-                    select_all_item = self.list_widget.item(0)
-                    select_all_item.setCheckState(Qt.Checked)
+                    if len(self.selected_items) == len(self.all_items):
+                        select_all_item = self.list_widget.item(0)
+                        select_all_item.setCheckState(Qt.Checked)
 
-        finally:
+            finally:
+                self.list_widget.blockSignals(False)
+
+            self.update_label()
+            self.selectionChanged.emit()
+
+        def update_label(self):
+            self.label.setText(f"{self.filtertype} Filter:")
+
+        def getselecteditems(self):
+            return list(self.selected_items)
+
+        def selectallitems(self):
+            self.list_widget.blockSignals(True)
+            self.selected_items = set(self.all_items)
+            for i in range(self.list_widget.count()):
+                item = self.list_widget.item(i)
+                item.setCheckState(Qt.Checked)
             self.list_widget.blockSignals(False)
+            self.update_label()
 
-        self.update_label()
-        self.selectionChanged.emit()
-
-    def update_label(self):
-        self.label.setText(f"{self.filtertype} Filter:")
-
-    def getselecteditems(self):
-        return list(self.selected_items)
-
-    def selectallitems(self):
-        self.list_widget.blockSignals(True)
-        self.selected_items = set(self.all_items)
-        for i in range(self.list_widget.count()):
-            item = self.list_widget.item(i)
-            item.setCheckState(Qt.Checked)
-        self.list_widget.blockSignals(False)
-        self.update_label()
+    _SIMPLE_FILTER_CLASS = SimpleMultiSelectFilter
+    return _SIMPLE_FILTER_CLASS
 
 
 class InventorybyPurposeWindow(QMainWindow):
@@ -680,7 +696,7 @@ class InventorybyPurposeWindow(QMainWindow):
         """Create a multi-select filter widget"""
         try:
             logger.info(f"Creating multiselect dropdown for {filtertype}")
-            return SimpleMultiSelectFilter(placeholdertext, filtertype)
+            return _get_simple_filter_class()(placeholdertext, filtertype)
         except Exception as e:
             error_msg = f"Error creating multiselect dropdown for {filtertype}: {str(e)}\n{tb.format_exc()}"
             logger.error(error_msg)
