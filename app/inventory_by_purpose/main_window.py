@@ -30,7 +30,7 @@ try:
         QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame,
         QApplication, QLineEdit, QGridLayout, QProgressDialog, QSpinBox, QSizePolicy
     )
-    from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QEvent, QThread
+    from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
     from PyQt5.QtGui import QFont, QColor, QFontMetrics
     logger.info("PyQt5 imported successfully")
 
@@ -1502,8 +1502,4 @@ class InventorybyPurposeWindow(QMainWindow):
         else:
             event.ignore()
 
-    def changeEvent(self, event):
-        """Repaint on screen or DPI changes to prevent rendering artifacts"""
-        super().changeEvent(event)
-        if event.type() in (QEvent.ScreenChangeInternal, QEvent.WindowStateChange):
-            self.repaint()
+
