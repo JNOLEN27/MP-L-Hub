@@ -275,6 +275,10 @@ def _get_simple_filter_class():
 class InventorybyPurposeWindow(QMainWindow):
     def __init__(self, userdata, parent=None):
         super().__init__(parent)
+        # Call setWindowTitle FIRST — before any logging or DataImportManager —
+        # to help pinpoint whether the crash is triggered by something that runs
+        # before it vs a fundamental issue with the class / Qt state.
+        self.setWindowTitle("Inventory by Purpose Application")
         def _flush():
             for h in logging.root.handlers:
                 try: h.flush()
@@ -282,6 +286,7 @@ class InventorybyPurposeWindow(QMainWindow):
 
         try:
             logger.info("=== Initializing InventorybyPurposeWindow ==="); _flush()
+            logger.info("setWindowTitle OK — init continues"); _flush()
             self.userdata = userdata
             logger.info(f"User data loaded: {userdata.get('username', 'unknown')}"); _flush()
 
@@ -305,10 +310,7 @@ class InventorybyPurposeWindow(QMainWindow):
             # MC simulation thread state
             self._mc_thread = None
             self._mc_progress_dialog = None
-            logger.info("Attributes set, calling setWindowTitle..."); _flush()
-
-            self.setWindowTitle("Inventory by Purpose Application")
-            logger.info("setWindowTitle OK"); _flush()
+            logger.info("Attributes set, calling resize..."); _flush()
             self.resize(*APPWINDOWSIZE)
             logger.info("resize OK"); _flush()
             self.setAttribute(Qt.WA_DeleteOnClose)
