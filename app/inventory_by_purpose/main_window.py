@@ -53,14 +53,6 @@ try:
         TORCH_AVAILABLE = False
         InventorybyPurposeNeuralNetwork = None
         logger.warning(f"PyTorch not available - neural network features disabled: {e}")
-    try:
-        import app.inventory_by_purpose.monte_tuc_sim as monte_tuc_sim
-        MONTE_CARLO_AVAILABLE = True
-        logger.info("Monte Carlo simulation module imported successfully")
-    except (ModuleNotFoundError, ImportError) as e:
-        monte_tuc_sim = None
-        MONTE_CARLO_AVAILABLE = False
-        logger.warning(f"Monte Carlo module unavailable: {e}")
     logger.info("App modules imported successfully")
 
     logger.info("=== All imports completed successfully ===")
@@ -112,13 +104,19 @@ def _get_mc_sim_thread_class():
 
         def run(self):
             try:
-                if not MONTE_CARLO_AVAILABLE or monte_tuc_sim is None:
-                    logger.warning("MCSimThread: Monte Carlo module unavailable")
+                # Lazy import — deferred until the thread actually runs so that
+                # tqdm / concurrent.futures are never imported at module load
+                # time (importing them early corrupts Qt's native state before
+                # the first setWindowTitle call).
+                try:
+                    import app.inventory_by_purpose.monte_tuc_sim as _mc
+                except (ImportError, ModuleNotFoundError) as ie:
+                    logger.warning(f"MCSimThread: Monte Carlo module unavailable: {ie}")
                     self.finished.emit({})
                     return
 
                 self.progress.emit(10, "Loading simulation data...")
-                mc_data = monte_tuc_sim.load_required_data(self.import_manager)
+                mc_data = _mc.load_required_data(self.import_manager)
                 logger.info("MCSimThread: data loaded")
 
                 if self._cancelled:
@@ -127,7 +125,7 @@ def _get_mc_sim_thread_class():
                     return
 
                 self.progress.emit(30, "Running Monte Carlo simulation\n(this may take several minutes)...")
-                forecast_result = monte_tuc_sim.plant_forecast_shared_pva(
+                forecast_result = _mc.plant_forecast_shared_pva(
                     self.days, mc_data, n_sims=self.n_sims
                 )
                 logger.info("MCSimThread: simulation complete")
