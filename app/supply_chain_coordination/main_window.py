@@ -165,7 +165,48 @@ class SupplyChainCoordinationWindow(QMainWindow):
         searchgridlayout.addWidget(countryfilter, 1, 1)
  
         layout.addWidget(searchgridwidget)
- 
+
+        # Part number list filter — paste a block of part numbers to filter to
+        # only those rows.  Accepts one-per-line or comma/semicolon-separated.
+        partlistwidget = QWidget()
+        partlistlayout = QVBoxLayout(partlistwidget)
+        partlistlayout.setContentsMargins(5, 5, 5, 5)
+        partlistlayout.setSpacing(3)
+
+        partlistheader = QHBoxLayout()
+        partlistlabel = QLabel("Part List:")
+        partlistlabel.setFont(QFont("Arial", 10, QFont.Bold))
+        partlistheader.addWidget(partlistlabel)
+        partlistheader.addStretch()
+        clearpartlistbtn = QPushButton("✕")
+        clearpartlistbtn.setFixedSize(20, 20)
+        clearpartlistbtn.setToolTip("Clear part list filter")
+        clearpartlistbtn.clicked.connect(self._clearpartlistfilter)
+        partlistheader.addWidget(clearpartlistbtn)
+        partlistlayout.addLayout(partlistheader)
+
+        self._partlist_textedit = QTextEdit()
+        self._partlist_textedit.setPlaceholderText(
+            "Paste part numbers here\n(one per line or comma-separated)"
+        )
+        self._partlist_textedit.setFixedHeight(115)
+        self._partlist_textedit.setFixedWidth(175)
+        self._partlist_textedit.setStyleSheet("font-size: 10px; font-family: monospace;")
+        partlistlayout.addWidget(self._partlist_textedit)
+
+        self._partlist_statuslabel = QLabel("")
+        self._partlist_statuslabel.setStyleSheet("font-size: 9px; color: #555;")
+        partlistlayout.addWidget(self._partlist_statuslabel)
+
+        layout.addWidget(partlistwidget)
+
+        # Debounce so we don't refilter on every keystroke while typing/pasting
+        self._partlist_timer = QTimer()
+        self._partlist_timer.setSingleShot(True)
+        self._partlist_timer.setInterval(400)
+        self._partlist_timer.timeout.connect(self.applyfilters)
+        self._partlist_textedit.textChanged.connect(self._partlist_timer.start)
+
         clearfiltersbtn = QPushButton("Clear All Filters")
         clearfiltersbtn.clicked.connect(self.clearfilters)
         clearfiltersbtn.setMaximumWidth(120)
@@ -499,7 +540,25 @@ class SupplyChainCoordinationWindow(QMainWindow):
                             continue
                 if dayvalues:
                     filtereddf = filtereddf[filtereddf['Day Alert'].isin(dayvalues)]
- 
+
+            if hasattr(self, '_partlist_textedit'):
+                raw = self._partlist_textedit.toPlainText().strip()
+                if raw and 'Part Number' in filtereddf.columns:
+                    # Accept newlines, commas, semicolons, and tabs as separators
+                    normalized = raw.replace(',', '\n').replace(';', '\n').replace('\t', '\n')
+                    partnums = {p.strip().upper() for p in normalized.splitlines() if p.strip()}
+                    if partnums:
+                        filtereddf = filtereddf[
+                            filtereddf['Part Number'].astype(str).str.upper().isin(partnums)
+                        ]
+                        self._partlist_statuslabel.setText(
+                            f"{len(filtereddf)} of {len(partnums)} found"
+                        )
+                    else:
+                        self._partlist_statuslabel.setText("")
+                else:
+                    self._partlist_statuslabel.setText("")
+
             searchcolumnmapping = {
                 'MFG': 'MFG Code',
                 'Part': 'Part Number',
@@ -551,9 +610,24 @@ class SupplyChainCoordinationWindow(QMainWindow):
             for searchfilter in self.searchfilters:
                 searchfilter.searchinput.clear()
                 searchfilter.statuslabel.setText("")
- 
+        self._clearpartlistfilter(refilter=False)
+
         if hasattr(self, 'originalcoveragedf'):
             self.displaycoveragetable(self.originalcoveragedf)
+
+    def _clearpartlistfilter(self, refilter=True):
+        """Clear the part list paste filter.  Pass refilter=False when called
+        from clearfilters (which redisplays the table itself)."""
+        if hasattr(self, '_partlist_timer'):
+            self._partlist_timer.stop()
+        if hasattr(self, '_partlist_textedit'):
+            self._partlist_textedit.blockSignals(True)
+            self._partlist_textedit.clear()
+            self._partlist_textedit.blockSignals(False)
+        if hasattr(self, '_partlist_statuslabel'):
+            self._partlist_statuslabel.setText("")
+        if refilter:
+            self.applyfilters()
  
     def createcoveragedashboard(self):
         widget = QWidget()
