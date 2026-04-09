@@ -472,38 +472,57 @@ class CoverageAnalysisEngine:
  
         last_col = day0_col
 
+        pending_receipts: Dict = {}    # part_no_upper -> accumulated qty from skipped weekend dates
+        pending_consumption: Dict = {} # part_no        -> accumulated qty from skipped weekend dates
+
         for dayoffset in range(1, daysforward):
             date = today + timedelta(days=dayoffset)
-        
+
             daily_receipts = receiptdata.get(date, pd.Series(dtype=float))
             daily_consumption = consumptiondata.get(date, pd.Series(dtype=float))
-        
+
+            # Accumulate into pending so weekend data rolls into the next weekday column
+            if not daily_receipts.empty:
+                for pn, qty in daily_receipts.items():
+                    pending_receipts[pn] = pending_receipts.get(pn, 0) + float(qty)
+            if not daily_consumption.empty:
+                for pn, qty in daily_consumption.items():
+                    pending_consumption[pn] = pending_consumption.get(pn, 0) + float(qty)
+
             if date.weekday() >= 5:
                 continue
-        
+
             datestr = date.strftime('%Y_%m_%d')
             colname = f'Day_{dayoffset:03d}_{datestr}'
             prevcol = last_col
- 
-            def safe_calculate(row, prevcol=prevcol, daily_receipts=daily_receipts, daily_consumption=daily_consumption):
+
+            # Snapshot pending dicts for capture in closure
+            snap_receipts = dict(pending_receipts)
+            snap_consumption = dict(pending_consumption)
+
+            def safe_calculate(row, prevcol=prevcol, snap_receipts=snap_receipts, snap_consumption=snap_consumption):
                 try:
                     if prevcol not in row.index:
                         return 0
                     prev_value = float(row[prevcol]) if pd.notna(row[prevcol]) else 0
                     part_no = row['PART_NO']
                     part_no_upper = str(part_no).upper().strip()
-                    receipts = float(daily_receipts.get(part_no_upper, 0)) if not daily_receipts.empty else 0
-                    consumption = float(daily_consumption.get(part_no, 0)) if not daily_consumption.empty else 0
+                    receipts = snap_receipts.get(part_no_upper, 0)
+                    consumption = snap_consumption.get(part_no, 0)
                     return prev_value + receipts - consumption
                 except:
                     return 0
- 
+
             try:
                 coveragedf[colname] = coveragedf.apply(safe_calculate, axis=1)
                 last_col = colname
             except:
                 coveragedf[colname] = 0
                 last_col = colname
+
+            # Reset pending after applying to this weekday column
+            pending_receipts = {}
+            pending_consumption = {}
  
         if 'Initial_Stock' in coveragedf.columns:
             coveragedf = coveragedf.drop('Initial_Stock', axis=1)
@@ -553,7 +572,19 @@ class CoverageAnalysisEngine:
                     errors='coerce',
                 ).fillna(0).sum()
                 initialstock = int(beginv + yardinv + portinv)
- 
+
+        # Apply inventory overrides from the Maintenance tab (same as addinitialstock)
+        try:
+            from app.supply_chain_coordination.adjustment_store import AdjustmentStore
+            overrides = {
+                r['part_no']: r['adjusted_value']
+                for r in AdjustmentStore.load_inventory_overrides() if r['active']
+            }
+            if partnumber in overrides:
+                initialstock = overrides[partnumber]
+        except Exception as e:
+            print(f"[findpartinfo] Warning: could not apply inventory override: {e}")
+
         return {
             'Part Number': partnumber,
             'Part Description': partrow.get('PART_DESC', ''),
@@ -584,8 +615,8 @@ class CoverageAnalysisEngine:
         consumptiondata = self.buildpartconsumption(partnumber, datadict)
         receiptdata = self.buildpartreceipts(partnumber, datadict)
         currentqty = initialstock
- 
-        for dayoffset in range(1, 91):
+
+        for dayoffset in range(0, 91):
             date = today + timedelta(days=dayoffset)
             datestr = date.strftime('%m/%d/%Y')
  
