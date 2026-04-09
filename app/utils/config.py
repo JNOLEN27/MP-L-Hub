@@ -61,7 +61,7 @@ AVAILABLEAPPS = {
         "module": "running_change"}
     }
 
-ADMINUSERS = ["jnolen", "jmccaslin", "mkaindl", "kwhite", "tgarbachevskaya", "esanta", "sscimemi", "mberry"]
+ADMINUSERS = ["jnolen", "ahuntington", "jmccaslin", "mkaindl", "kwhite", "tgarbachevskaya", "esanta", "sscimemi", "mberry"]
 
 POWERUSERS = {
     "ljohnson": ["master_data", "current_inventory_report", "part_requirements_split_1", "part_requirements_split_2", "part_requirements_split_3", "splunk_receiving", "goods_to_be_received", "alert_report", "manual_ttt", "goods_to_be_departed"],
