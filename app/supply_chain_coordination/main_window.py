@@ -110,6 +110,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
         tabs.addTab(alertstab, "Alerts Breakdown")
         tabs.addTab(piwdtab, "PIWD Report")
 
+        from app.utils.config import ADMINUSERS, POWERUSERS
+        username = self.userdata.get('username', '')
+        if username in ADMINUSERS or username in POWERUSERS:
+            from app.supply_chain_coordination.maintenance_tab import MaintenanceTab
+            mainttab = MaintenanceTab(self.import_manager, self.userdata)
+            tabs.addTab(mainttab, "Maintenance")
+
         layout.addWidget(tabs)
  
         self.statusBar().showMessage(f"Logged in as: {self.userdata['username']}")

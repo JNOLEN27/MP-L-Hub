@@ -3,28 +3,137 @@ import pandas as pd
 import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
- 
- 
+
+
+def _normalize_df(df: pd.DataFrame, data_key: str, mapping: dict) -> pd.DataFrame:
+    """Rename actual column names to the engine's expected defaults using the column mapping.
+
+    mapping: {logical_key: actual_col_name}  (from AdjustmentStore.load_column_mapping())
+    Only renames columns that differ from the default and exist in *df*.
+    """
+    from app.supply_chain_coordination.adjustment_store import COLUMN_MAPPING_DEFAULTS
+    key_prefix = {
+        'current_inventory_report': 'inv.',
+        'master_data':              'md.',
+        'part_requirement_split':   'req.',
+        'splunk_receiving_data':    'splunk.',
+        'goods_to_be_received':     'gtr.',
+    }
+    logical_prefix = next(
+        (pfx for k, pfx in key_prefix.items() if data_key.startswith(k)), None
+    )
+    if not logical_prefix or df.empty:
+        return df
+
+    rename_dict = {}
+    for lk, default_col in COLUMN_MAPPING_DEFAULTS.items():
+        if not lk.startswith(logical_prefix):
+            continue
+        actual_col = mapping.get(lk, default_col)
+        if actual_col != default_col and actual_col in df.columns and default_col not in df.columns:
+            rename_dict[actual_col] = default_col
+
+    return df.rename(columns=rename_dict) if rename_dict else df
+
+
+def _apply_delivery_adjustments(df: pd.DataFrame, source: str) -> pd.DataFrame:
+    """Apply active delivery edits and adds from the adjustment store to *df*.
+
+    source: 'splunk' | 'goods_to_be_received'
+    Columns in *df* are assumed to already be normalized to their default names.
+    """
+    from app.supply_chain_coordination.adjustment_store import AdjustmentStore, COLUMN_MAPPING_DEFAULTS
+    adjustments = [
+        r for r in AdjustmentStore.load_delivery_adjustments()
+        if r['active'] and r['source'] == source
+    ]
+    if not adjustments or df.empty:
+        return df
+
+    if source == 'splunk':
+        part_col = COLUMN_MAPPING_DEFAULTS['splunk.part_no']
+        date_col = COLUMN_MAPPING_DEFAULTS['splunk.date']
+        qty_col  = COLUMN_MAPPING_DEFAULTS['splunk.qty']
+    elif source == 'goods_to_be_received':
+        part_col = COLUMN_MAPPING_DEFAULTS['gtr.part_no']
+        date_col = COLUMN_MAPPING_DEFAULTS['gtr.date']
+        qty_col  = COLUMN_MAPPING_DEFAULTS['gtr.qty']
+    else:
+        return df
+
+    if part_col not in df.columns or date_col not in df.columns:
+        return df
+
+    df = df.copy()
+
+    # ---- edits: match part_no + date, replace qty ----
+    for rec in (r for r in adjustments if r['type'] == 'edit'):
+        part_mask = df[part_col].astype(str).str.upper().str.strip() == rec['part_no'].upper()
+        try:
+            date_mask = pd.to_datetime(df[date_col], errors='coerce').dt.strftime('%Y-%m-%d') == rec['date']
+        except Exception:
+            date_mask = df[date_col].astype(str).str[:10] == rec['date']
+        matches = part_mask & date_mask
+        if matches.any() and qty_col in df.columns:
+            df.loc[matches, qty_col] = rec['adjusted_qty']
+
+    # ---- adds: append new rows ----
+    add_records = [r for r in adjustments if r['type'] == 'add']
+    if add_records and qty_col in df.columns:
+        new_rows = []
+        for rec in add_records:
+            new_row = {col: None for col in df.columns}
+            new_row[part_col] = rec['part_no']
+            new_row[date_col] = rec['date']
+            new_row[qty_col] = rec['adjusted_qty']
+            new_rows.append(new_row)
+        df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
+
+    return df
+
+
 class CoverageAnalysisEngine:
     def __init__(self, import_manager):
         self.import_manager = import_manager
  
     def loadrequireddata(self) -> Tuple[bool, str, Dict[str, pd.DataFrame]]:
         try:
+            from app.supply_chain_coordination.adjustment_store import AdjustmentStore
+            col_mapping = AdjustmentStore.load_column_mapping()
+
+            splunk_raw = _normalize_df(
+                self.import_manager.loaddata("splunk_receiving_data"),
+                'splunk_receiving_data', col_mapping,
+            )
             data = {
-                'current_inventory': self.import_manager.loaddata("current_inventory_report"),
-                'master_data': self.import_manager.loaddata("master_data"),
-                'req_split_1': self.import_manager.loaddata("part_requirement_split_1"),
-                'req_split_2': self.import_manager.loaddata("part_requirement_split_2"),
-                'req_split_3': self.import_manager.loaddata("part_requirement_split_3"),
-                'splunk_data': self.import_manager.loaddata("splunk_receiving_data"),
+                'current_inventory': _normalize_df(
+                    self.import_manager.loaddata("current_inventory_report"),
+                    'current_inventory_report', col_mapping,
+                ),
+                'master_data': _normalize_df(
+                    self.import_manager.loaddata("master_data"),
+                    'master_data', col_mapping,
+                ),
+                'req_split_1': _normalize_df(
+                    self.import_manager.loaddata("part_requirement_split_1"),
+                    'part_requirement_split', col_mapping,
+                ),
+                'req_split_2': _normalize_df(
+                    self.import_manager.loaddata("part_requirement_split_2"),
+                    'part_requirement_split', col_mapping,
+                ),
+                'req_split_3': _normalize_df(
+                    self.import_manager.loaddata("part_requirement_split_3"),
+                    'part_requirement_split', col_mapping,
+                ),
+                'splunk_data': _apply_delivery_adjustments(splunk_raw, 'splunk'),
             }
- 
+
             if data['current_inventory'].empty or data['master_data'].empty:
                 return False, "Current Inventory Report and Master Data are required.", data
- 
+
             return True, "Data loaded successfully", data
- 
+
         except Exception as e:
             return False, f"Error loading data: {str(e)}", {}
  
@@ -313,8 +422,26 @@ class CoverageAnalysisEngine:
             coveragedf['Initial_Stock'] = 0
  
         coveragedf['Initial_Stock'] = coveragedf['Initial_Stock'].fillna(0)
+
+        # Apply inventory overrides from the Maintenance tab (active records only)
+        try:
+            from app.supply_chain_coordination.adjustment_store import AdjustmentStore
+            overrides = {
+                r['part_no']: r['adjusted_value']
+                for r in AdjustmentStore.load_inventory_overrides() if r['active']
+            }
+            if overrides:
+                coveragedf['Initial_Stock'] = coveragedf.apply(
+                    lambda row: overrides.get(
+                        str(row['PART_NO']).upper().strip(), row['Initial_Stock']
+                    ),
+                    axis=1,
+                )
+        except Exception as e:
+            print(f"[CoverageAnalysis] Warning: could not apply inventory overrides: {e}")
+
         return coveragedf
- 
+
     def adddailyprojections(self, coveragedf: pd.DataFrame, datadict: Dict[str, pd.DataFrame], daysforward: int) -> pd.DataFrame:
         consumptiondata = self.combineconsumptiondata(
             datadict['req_split_1'],
