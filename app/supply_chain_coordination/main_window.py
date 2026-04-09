@@ -694,7 +694,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._frozen_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._frozen_view.setStyleSheet(
             "QTableView { border: none; }"
-            "QHeaderView::section { background-color: #e8e8e8; padding: 8px;"
+            "QHeaderView::section { background-color: #e8e8e8;"
             " border: 1px solid #d0d0d0; font-weight: bold; }"
         )
         self._frozen_view.hide()
@@ -738,6 +738,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         vhw = ct.verticalHeader().width()
         fw = ct.frameWidth()
         hh = ct.horizontalHeader().height()
+        fv.horizontalHeader().setFixedHeight(hh)
         frozen_width = sum(ct.columnWidth(c) for c in range(n))
         fv.setGeometry(vhw + fw, fw, frozen_width, ct.viewport().height() + hh)
 
