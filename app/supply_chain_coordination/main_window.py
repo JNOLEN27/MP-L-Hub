@@ -1,8 +1,8 @@
 import json
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog)
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog, QTableView, QSpinBox)
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QEvent
 from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, timedelta
 from app.utils.config import APPWINDOWSIZE, getsharednetworkpath
@@ -558,43 +558,113 @@ class SupplyChainCoordinationWindow(QMainWindow):
     def createcoveragedashboard(self):
         widget = QWidget()
         layout = QVBoxLayout()
- 
+
         title = QLabel("Coverage Dashboard")
         title.setFont(QFont("Arial", 16, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
- 
+
         buttonlayout = QHBoxLayout()
- 
+
         loadbtn = QPushButton("Generate Coverage Analysis")
         loadbtn.clicked.connect(self.generatecoverageanalysis)
         loadbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
         buttonlayout.addWidget(loadbtn)
- 
+
         refreshbtn = QPushButton("Refresh Data")
         refreshbtn.clicked.connect(self.refreshcoveragedata)
         buttonlayout.addWidget(refreshbtn)
- 
+
         exportbtn = QPushButton("Export to CSV")
         exportbtn.clicked.connect(self.exportcoveragetable)
         buttonlayout.addWidget(exportbtn)
- 
+
+        freezelabel = QLabel("Freeze:")
+        freezelabel.setContentsMargins(8, 0, 2, 0)
+        buttonlayout.addWidget(freezelabel)
+        self._freeze_spinbox = QSpinBox()
+        self._freeze_spinbox.setRange(0, 10)
+        self._freeze_spinbox.setValue(0)
+        self._freeze_spinbox.setSuffix(" col(s)")
+        self._freeze_spinbox.setFixedWidth(90)
+        self._freeze_spinbox.setToolTip("Number of columns to freeze on the left while scrolling")
+        self._freeze_spinbox.valueChanged.connect(self._setfrozencolumns)
+        buttonlayout.addWidget(self._freeze_spinbox)
+
         buttonlayout.addStretch()
         layout.addLayout(buttonlayout)
- 
+
         self.filtersection = self.createfiltersection()
         layout.addWidget(self.filtersection)
- 
-        scrollarea = QScrollArea()
-        scrollarea.setWidgetResizable(True)
+
+        self._frozen_col_count = 0
         self.coveragetable = QTableWidget()
         self.coveragetable.setSortingEnabled(True)
-        scrollarea.setWidget(self.coveragetable)
-        layout.addWidget(scrollarea)
- 
+        self.coveragetable.horizontalHeader().sectionResized.connect(
+            lambda _col, _old, _new: self._update_frozen_geometry())
+        layout.addWidget(self.coveragetable)
+
+        # Frozen column overlay — a QTableView sharing the same model, positioned
+        # as a child of coveragetable so it floats over the first N columns.
+        self._frozen_view = QTableView(self.coveragetable)
+        self._frozen_view.setFocusPolicy(Qt.NoFocus)
+        self._frozen_view.verticalHeader().hide()
+        self._frozen_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._frozen_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._frozen_view.setStyleSheet(
+            "QTableView { border: none; }"
+            "QHeaderView::section { background-color: #e8e8e8; padding: 8px;"
+            " border: 1px solid #d0d0d0; font-weight: bold; }"
+        )
+        self._frozen_view.hide()
+        self.coveragetable.verticalScrollBar().valueChanged.connect(
+            self._frozen_view.verticalScrollBar().setValue)
+        self.coveragetable.installEventFilter(self)
+
         widget.setLayout(layout)
         return widget
- 
+
+    def _setfrozencolumns(self, n):
+        """Show/hide the frozen column overlay for the first *n* columns."""
+        self._frozen_col_count = n
+        ct = self.coveragetable
+        fv = self._frozen_view
+        # Re-bind model in case setColumnCount() swapped the internal model
+        if fv.model() is not ct.model():
+            fv.setModel(ct.model())
+        ncols = ct.columnCount()
+        if n == 0 or ncols == 0:
+            fv.hide()
+            return
+        n = min(n, ncols - 1)   # always keep at least one scrollable column
+        self._frozen_col_count = n
+        for c in range(ncols):
+            fv.setColumnHidden(c, c >= n)
+        self._update_frozen_geometry()
+        fv.show()
+        fv.raise_()
+
+    def _update_frozen_geometry(self):
+        """Resize and reposition the frozen view to align with the main table."""
+        n = self._frozen_col_count
+        ct = self.coveragetable
+        fv = self._frozen_view
+        if n == 0 or ct.columnCount() == 0:
+            return
+        n = min(n, ct.columnCount())
+        for c in range(n):
+            fv.setColumnWidth(c, ct.columnWidth(c))
+        vhw = ct.verticalHeader().width()
+        fw = ct.frameWidth()
+        hh = ct.horizontalHeader().height()
+        frozen_width = sum(ct.columnWidth(c) for c in range(n))
+        fv.setGeometry(vhw + fw, fw, frozen_width, ct.viewport().height() + hh)
+
+    def eventFilter(self, obj, event):
+        if obj is self.coveragetable and event.type() == QEvent.Resize:
+            self._update_frozen_geometry()
+        return super().eventFilter(obj, event)
+
     def createcalloffforecasttab(self):
         widget = QWidget()
         layout = QVBoxLayout()
@@ -1588,6 +1658,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 self.coveragetable.setColumnWidth(self.comments_col, 200)
             self.coveragetable.setSortingEnabled(True)
             self.coveragetable.itemChanged.connect(self.oncommentchanged)
+            self._setfrozencolumns(self._frozen_col_count)
  
     def oncommentchanged(self, item):
         try:
