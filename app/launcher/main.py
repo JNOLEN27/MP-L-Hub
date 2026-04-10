@@ -9,6 +9,13 @@ from app.auth.permissions import PermissionsManager
 
 class Application:
     def __init__(self):
+        # Enable automatic pixel-ratio scaling so all hardcoded sizes stay
+        # proportional regardless of the OS display-scaling factor (125 %, 150 %,
+        # 200 %, etc.).  Must be set before QApplication is constructed.
+        if hasattr(Qt, 'AA_EnableHighDpiScaling'):
+            QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+        if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
+            QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
         self.app = QApplication(sys.argv)
         self.app.setApplicationName("VCCH Material Planning and Logistics Hub")
         self.userdata = None

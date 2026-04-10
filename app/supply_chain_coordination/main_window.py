@@ -124,9 +124,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createfiltersection(self):
         widget = QWidget()
- 
+        widget.setMaximumHeight(190)
+
         layout = QHBoxLayout()
- 
+
         filterlabel = QLabel("Filters:")
         filterlabel.setFont(QFont("Arial", 12, QFont.Bold))
         filterlabel.setAlignment(Qt.AlignTop)
@@ -225,6 +226,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createalertfiltersection(self):
         widget = QWidget()
+        widget.setMaximumHeight(190)
  
         layout = QHBoxLayout()
  
@@ -274,8 +276,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             def __init__(self, placeholder="Select items...", filtertype="SCC"):
                 super().__init__()
                 self.filtertype = filtertype
-                self.setMinimumHeight(150)
-                self.setMinimumWidth(130)
+                self.setFixedHeight(170)
  
                 layout = QVBoxLayout()
                 layout.setContentsMargins(5, 5, 5, 5)
