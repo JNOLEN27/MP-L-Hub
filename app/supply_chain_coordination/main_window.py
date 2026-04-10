@@ -724,6 +724,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
         self._frozen_col_count = 0
         self.coveragetable = QTableWidget()
+        self.coveragetable.setWordWrap(True)
         self.coveragetable.setSortingEnabled(True)
         self.coveragetable.horizontalHeader().sectionResized.connect(
             lambda _col, _old, _new: self._update_frozen_geometry())
@@ -1781,6 +1782,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.coveragetable.resizeColumnsToContents()
             if self.comments_col is not None:
                 self.coveragetable.setColumnWidth(self.comments_col, 200)
+                if 'Comments' in coveragedf.columns:
+                    comments_vals = coveragedf['Comments'].values
+                    for row in range(n_rows):
+                        if str(comments_vals[row]).strip():
+                            self.coveragetable.resizeRowToContents(row)
             self.coveragetable.setSortingEnabled(True)
             self.coveragetable.itemChanged.connect(self.oncommentchanged)
             self._setfrozencolumns(self._frozen_col_count)
@@ -1807,6 +1813,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 self._comments_cache.pop(partno, None)
  
             self.coverageengine.savecoveragecomments(self._comments_cache)
+            self.coveragetable.resizeRowToContents(item.row())
  
         except Exception as e:
             print(f"Error saving comment: {e}")
