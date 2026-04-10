@@ -331,7 +331,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 layout.addWidget(self.label)
  
                 self.list_widget = QListWidget()
-                self.list_widget.setMaximumHeight(150)
                 self.list_widget.itemChanged.connect(self.on_item_changed)
                 self.list_widget.setStyleSheet("""
                     QListWidget {
