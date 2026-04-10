@@ -859,6 +859,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         scrollarea = QScrollArea()
         scrollarea.setWidgetResizable(True)
         self.ldjistable = QTableWidget()
+        self.ldjistable.setWordWrap(True)
         self.ldjistable.setSortingEnabled(False)
         self.ldjistable.setStyleSheet(tablestyle)
         scrollarea.setWidget(self.ldjistable)
@@ -897,6 +898,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         scrollarea = QScrollArea()
         scrollarea.setWidgetResizable(True)
         self.alertstable = QTableWidget()
+        self.alertstable.setWordWrap(True)
         self.alertstable.setSortingEnabled(True)
         self.alertstable.setStyleSheet(tablestyle)
         scrollarea.setWidget(self.alertstable)
@@ -935,6 +937,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         scrollarea = QScrollArea()
         scrollarea.setWidgetResizable(True)
         self.piwdtable = QTableWidget()
+        self.piwdtable.setWordWrap(True)
         self.piwdtable.setSortingEnabled(True)
         self.piwdtable.setStyleSheet(tablestyle)
         scrollarea.setWidget(self.piwdtable)
@@ -1878,6 +1881,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     del self._alerts_cache[key]
 
             self._savealertsdata(self._alerts_cache)
+            self.alertstable.resizeRowToContents(item.row())
         except Exception as e:
             print(f"Error saving alert change: {e}")
 
@@ -1939,6 +1943,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     del self._piwd_cache[key]
 
             self._savepiwddata(self._piwd_cache)
+            self.piwdtable.resizeRowToContents(item.row())
         except Exception as e:
             print(f"Error saving PIWD change: {e}")
 
@@ -2312,6 +2317,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         finally:
             self.alertstable.setUpdatesEnabled(True)
             self.alertstable.resizeColumnsToContents()
+            self.alertstable.resizeRowsToContents()
             self.alertstable.setSortingEnabled(True)
             self.alertstable.itemChanged.connect(self._onalertchanged)
 
@@ -2374,6 +2380,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         finally:
             self.piwdtable.setUpdatesEnabled(True)
             self.piwdtable.resizeColumnsToContents()
+            self.piwdtable.resizeRowsToContents()
             self.piwdtable.setSortingEnabled(True)
             self.piwdtable.itemChanged.connect(self._onpiwdchanged)
 
