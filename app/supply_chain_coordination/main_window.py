@@ -25,6 +25,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._alerts_cache = None
         self._piwd_cache = None
         self.setWindowTitle("Supply Chain Coordination Application")
+        # Compute DPI-aware heights for the filter sections.
+        # Design reference is 96 DPI (Windows 100 % scaling).  On higher-DPI
+        # screens the font metrics demand more pixels, so we scale up.
+        self._dropdowns = []   # all SimpleMultiSelectFilter instances, for live updates
+        self._recalc_filter_heights(QApplication.primaryScreen())
         self.resize(*APPWINDOWSIZE)
         self.setupui()
  
@@ -121,10 +126,49 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         self.statusBar().showMessage(f"Logged in as: {self.userdata['username']}")
         centralwidget.setLayout(layout)
- 
+
+    # ------------------------------------------------------------------
+    # DPI-aware filter-section sizing
+    # ------------------------------------------------------------------
+
+    def _recalc_filter_heights(self, screen):
+        """Recompute _filter_section_h and _dropdown_h from *screen*'s DPI."""
+        dpi = screen.logicalDotsPerInch() if screen else 96.0
+        scale = max(0.75, min(2.0, dpi / 96.0))
+        self._filter_section_h = int(190 * scale)
+        self._dropdown_h = int(170 * scale)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Connect to the native window's screenChanged signal exactly once.
+        if not getattr(self, '_screen_signal_connected', False):
+            win = self.windowHandle()
+            if win is not None:
+                win.screenChanged.connect(self._on_screen_changed)
+                self._screen_signal_connected = True
+        # Recompute immediately for whichever screen the window lands on.
+        screen = QApplication.screenAt(self.geometry().center())
+        if screen:
+            self._recalc_filter_heights(screen)
+            self._reapply_filter_heights()
+
+    def _on_screen_changed(self, new_screen):
+        """Called by Qt when the window is moved to a different monitor."""
+        self._recalc_filter_heights(new_screen)
+        self._reapply_filter_heights()
+
+    def _reapply_filter_heights(self):
+        """Push the current _filter_section_h / _dropdown_h to all live widgets."""
+        if hasattr(self, 'filtersection'):
+            self.filtersection.setMaximumHeight(self._filter_section_h)
+        if hasattr(self, 'alertfiltersection'):
+            self.alertfiltersection.setMaximumHeight(self._filter_section_h)
+        for dd in self._dropdowns:
+            dd.setFixedHeight(self._dropdown_h)
+
     def createfiltersection(self):
         widget = QWidget()
-        widget.setMaximumHeight(190)
+        widget.setMaximumHeight(self._filter_section_h)
 
         layout = QHBoxLayout()
 
@@ -226,7 +270,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createalertfiltersection(self):
         widget = QWidget()
-        widget.setMaximumHeight(190)
+        widget.setMaximumHeight(self._filter_section_h)
  
         layout = QHBoxLayout()
  
@@ -270,13 +314,14 @@ class SupplyChainCoordinationWindow(QMainWindow):
         return widget
  
     def createmultiselectdropdown(self, placeholdertext, filtertype="SCC"):
+        dropdown_h = self._dropdown_h  # captured for closure; updated live via _dropdowns list
         class SimpleMultiSelectFilter(QWidget):
             selectionChanged = pyqtSignal()
- 
+
             def __init__(self, placeholder="Select items...", filtertype="SCC"):
                 super().__init__()
                 self.filtertype = filtertype
-                self.setFixedHeight(170)
+                self.setFixedHeight(dropdown_h)
  
                 layout = QVBoxLayout()
                 layout.setContentsMargins(5, 5, 5, 5)
@@ -415,7 +460,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
                 self.update_label()
  
-        return SimpleMultiSelectFilter(placeholdertext, filtertype)
+        widget = SimpleMultiSelectFilter(placeholdertext, filtertype)
+        self._dropdowns.append(widget)
+        return widget
  
     def createsearchfilter(self, filtertype="MFG", columnname="SUPP_MFG"):
         widget = QWidget()
