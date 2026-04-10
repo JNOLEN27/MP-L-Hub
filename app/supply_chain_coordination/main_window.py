@@ -124,7 +124,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createfiltersection(self):
         widget = QWidget()
-        widget.setMaximumHeight(190)
  
         layout = QHBoxLayout()
  
@@ -181,7 +180,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         partlistlayout.setSpacing(3)
 
         partlistheader = QHBoxLayout()
-        partlistlabel = QLabel("Part List:")
+        partlistlabel = QLabel("Multiple Part Search:")
         partlistlabel.setFont(QFont("Arial", 10, QFont.Bold))
         partlistheader.addWidget(partlistlabel)
         partlistheader.addStretch()
@@ -226,7 +225,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createalertfiltersection(self):
         widget = QWidget()
-        widget.setMaximumHeight(190)
  
         layout = QHBoxLayout()
  
@@ -276,7 +274,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             def __init__(self, placeholder="Select items...", filtertype="SCC"):
                 super().__init__()
                 self.filtertype = filtertype
-                self.setFixedHeight(170)
+                self.setMinimumHeight(150)
+                self.setMinimumWidth(130)
  
                 layout = QVBoxLayout()
                 layout.setContentsMargins(5, 5, 5, 5)
@@ -419,8 +418,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createsearchfilter(self, filtertype="MFG", columnname="SUPP_MFG"):
         widget = QWidget()
-        widget.setFixedHeight(120)
-        widget.setFixedWidth(180)
+        widget.setMinimumHeight(100)
+        widget.setMinimumWidth(150)
  
         layout = QVBoxLayout()
         layout.setContentsMargins(3, 3, 3, 3)
@@ -439,15 +438,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
         btnlayout.setSpacing(2)
  
         searchbtn = QPushButton("✓")
-        searchbtn.setMaximumHeight(22)
-        searchbtn.setMaximumWidth(25)
+        searchbtn.setFixedSize(30, 24)
         searchbtn.clicked.connect(self.applyfilters)
         searchbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; border: none; padding: 2px; border-radius: 3px;} QPushButton:hover {background-color: #45a049;}""")
         btnlayout.addWidget(searchbtn)
- 
+
         clearsearchbtn = QPushButton("✖")
-        clearsearchbtn.setMaximumHeight(22)
-        clearsearchbtn.setMaximumWidth(25)
+        clearsearchbtn.setFixedSize(30, 24)
         clearsearchbtn.clicked.connect(lambda: self.clearsearchfilter(widget))
         clearsearchbtn.setStyleSheet("""QPushButton {background-color: #E97132; color: white; border: none; padding: 2px; border-radius: 3px;} QPushButton:hover {background-color: #da190b;}""")
         btnlayout.addWidget(clearsearchbtn)
@@ -1056,7 +1053,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createpartinfosection(self):
         widget = QWidget()
-        widget.setMaximumHeight(200)
  
         layout = QVBoxLayout()
         infotitle = QLabel("Part Information")
