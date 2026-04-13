@@ -2046,7 +2046,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     def _piwed_day_label(comments):
                         if not isinstance(comments, str):
                             return None
-                        m = re.search(r'Prod\.Day=(\d{4}-\d{2}-\d{2})', comments)
+                        m = re.search(r'Prod\.day=(\d{4}-\d{2}-\d{2})', comments, re.IGNORECASE)
                         if not m:
                             return None
                         try:
@@ -2190,8 +2190,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             for col in self._PIWD_EDITABLE_COLS:
                 displaydf[col] = ''
 
-            # Load previously saved editable values from shared drive, pruning
-            # any entries whose Part key is no longer in the current report
             saved = self._loadpiwddata()
             if 'Part' in displaydf.columns:
                 current_keys = {str(r['Part']) for _, r in displaydf.iterrows()}
