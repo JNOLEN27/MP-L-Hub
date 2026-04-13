@@ -457,10 +457,14 @@ class CoverageAnalysisEngine:
         day0_receipts = receiptdata.get(today, pd.Series(dtype=float))
         day0_consumption = consumptiondata.get(today, pd.Series(dtype=float))
  
+        def _norm_part(p):
+            s = str(p).strip().upper()
+            return s[:-2] if s.endswith('.0') else s
+
         def calc_day0(row):
             try:
                 part_no = row['PART_NO']
-                part_no_upper = str(part_no).upper().strip()
+                part_no_upper = _norm_part(part_no)
                 receipts = float(day0_receipts.get(part_no_upper, 0)) if not day0_receipts.empty else 0
                 consumption = float(day0_consumption.get(part_no, 0)) if not day0_consumption.empty else 0
                 return float(row['Initial_Stock']) + receipts - consumption
@@ -506,7 +510,7 @@ class CoverageAnalysisEngine:
                         return 0
                     prev_value = float(row[prevcol]) if pd.notna(row[prevcol]) else 0
                     part_no = row['PART_NO']
-                    part_no_upper = str(part_no).upper().strip()
+                    part_no_upper = _norm_part(part_no)
                     receipts = snap_receipts.get(part_no_upper, 0)
                     consumption = snap_consumption.get(part_no, 0)
                     return prev_value + receipts - consumption
@@ -707,44 +711,50 @@ class CoverageAnalysisEngine:
         if splunkdf.empty or 'Part Number' not in splunkdf.columns:
             return receiptbydate
  
-        target = partnumber.upper()
-        partreceipts = splunkdf[
-            splunkdf['Part Number'].astype(str).str.upper().str.strip() == target
-        ]
+        # Normalize the same way parsesplunkreceivingdata does, so .0 float artifacts match
+        import re as _re
+        target = _re.sub(r'\.0$', '', partnumber.strip()).upper()
+        normalized = splunkdf['Part Number'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).str.upper()
+        partreceipts = splunkdf[normalized == target]
         if partreceipts.empty:
             return receiptbydate
- 
+
         date_col = 'Load Delivery Date Final'
         if date_col not in partreceipts.columns:
             return receiptbydate
- 
+
         qty_col = self.findcolumn(splunkdf, [
             'Quantity', 'QTY', 'Qty', 'QUANTITY', 'ARTAN',
             'Load Quantity', 'TO Quantity', 'Receipt Qty', 'Receipt QTY',
             'Pieces', 'Units',
         ])
- 
+
+        def _shift(d):
+            if not pd.notna(d): return d
+            d = d + timedelta(days=1)
+            if d.weekday() == 5: d += timedelta(days=2)
+            elif d.weekday() == 6: d += timedelta(days=1)
+            return d
+
         try:
-            def _shift(d):
-                if not pd.notna(d): return d
-                d = d + timedelta(days=1)
-                if d.weekday() == 5: d += timedelta(days=2)
-                elif d.weekday() == 6: d += timedelta(days=1)
-                return d
             df = partreceipts.copy()
             df['_date'] = pd.to_datetime(df[date_col], errors='coerce').dt.date.apply(_shift)
             df['_qty'] = (pd.to_numeric(df[qty_col], errors='coerce').fillna(0) if qty_col else pd.Series(0, index=df.index))
             df = df[df['_qty'] > 0].dropna(subset=['_date'])
- 
-            for _, row in df.iterrows():
+        except Exception as e:
+            print(f"[buildpartreceipts] Error preparing data: {e}")
+            return receiptbydate
+
+        for _, row in df.iterrows():
+            try:
                 receiptbydate.setdefault(row['_date'], []).append({
                     'quantity': int(row['_qty']),
-                    'asn': str(row.get('TO Number', '')),
+                    'asn': str(row.get('TO Number', '') or ''),
                     'po': '',
                 })
-        except Exception:
-            pass
- 
+            except Exception as e:
+                print(f"[buildpartreceipts] Skipping row: {e}")
+
         return receiptbydate
  
     def findcolumn(self, df, possiblenames):
