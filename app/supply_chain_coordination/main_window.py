@@ -1,4 +1,5 @@
 import json
+import re
 import numpy as np
 import pandas as pd
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog, QTableView, QSpinBox)
@@ -2023,11 +2024,45 @@ class SupplyChainCoordinationWindow(QMainWindow):
             
             if 'ALERT_TYPE' in alertdf.columns:
                 alertdf = alertdf[alertdf['ALERT_TYPE'] == 'Shortage alert']
-                
+
             if 'ALERT_DETAILS' in alertdf.columns:
-                alertdf = alertdf[alertdf['ALERT_DETAILS'].str.contains(r'Day [1-4]\b', case=False, na=False)]
-                alertdf['ALERT_DETAILS'] = alertdf['ALERT_DETAILS'].str.extract(r'(Day [1-4])\b', expand=False)
-                
+                today = datetime.now().date()
+
+                # Normal Day 1-4 rows
+                day_mask = alertdf['ALERT_DETAILS'].str.contains(r'Day [1-4]\b', case=False, na=False)
+                normal_df = alertdf[day_mask].copy()
+                normal_df['ALERT_DETAILS'] = normal_df['ALERT_DETAILS'].str.extract(r'(Day [1-4])\b', expand=False)
+
+                # PIWED rows: parse Prod.Day=YYYY-MM-DD from COMMENTS, include if 1-4 days out
+                piwed_candidates = pd.DataFrame()
+                piwed_mask = alertdf['ALERT_DETAILS'].str.contains(
+                    r'PIWED below zero using GC ETA', case=False, na=False
+                )
+                if piwed_mask.any() and 'COMMENTS' in alertdf.columns:
+                    piwed_df = alertdf[piwed_mask].copy()
+
+                    def _piwed_day_label(comments):
+                        if not isinstance(comments, str):
+                            return None
+                        m = re.search(r'Prod\.Day=(\d{4}-\d{2}-\d{2})', comments)
+                        if not m:
+                            return None
+                        try:
+                            diff = (datetime.strptime(m.group(1), '%Y-%m-%d').date() - today).days
+                            return f'Day {diff}' if 1 <= diff <= 4 else None
+                        except ValueError:
+                            return None
+
+                    piwed_df['ALERT_DETAILS'] = piwed_df['COMMENTS'].apply(_piwed_day_label)
+                    piwed_candidates = piwed_df[piwed_df['ALERT_DETAILS'].notna()].copy()
+
+                # Combine: normal rows first so they win on dedup
+                alertdf = pd.concat([normal_df, piwed_candidates], ignore_index=True)
+
+                # Remove duplicates where the same part already appears at the same day level
+                if 'PART' in alertdf.columns and not alertdf.empty:
+                    alertdf = alertdf.drop_duplicates(subset=['PART', 'ALERT_DETAILS'], keep='first')
+
             if alertdf.empty:
                 QMessageBox.information(self, "No Data", "No Shortage alert rows for Day 1-4 found in the alert report")
                 return

@@ -73,6 +73,8 @@ a = Analysis(
         'app.supply_chain_coordination.coverage_analysis',
         'app.supply_chain_coordination.waterfall_analysis',
         'app.supply_chain_coordination.ldjis_coverage',
+        'app.supply_chain_coordination.adjustment_store',
+        'app.supply_chain_coordination.maintenance_tab',
         'app.inventory_by_purpose',
         'app.inventory_by_purpose.main_window',
         'app.inventory_by_purpose.main_window_minimal',
