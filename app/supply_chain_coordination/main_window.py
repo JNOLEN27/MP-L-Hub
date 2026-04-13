@@ -2023,17 +2023,19 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 return
             
             if 'ALERT_TYPE' in alertdf.columns:
-                alertdf = alertdf[alertdf['ALERT_TYPE'] == 'Shortage alert']
+                shortage_df = alertdf[alertdf['ALERT_TYPE'] == 'Shortage alert']
+            else:
+                shortage_df = alertdf
 
             if 'ALERT_DETAILS' in alertdf.columns:
                 today = datetime.now().date()
 
-                # Normal Day 1-4 rows
-                day_mask = alertdf['ALERT_DETAILS'].str.contains(r'Day [1-4]\b', case=False, na=False)
-                normal_df = alertdf[day_mask].copy()
+                # Normal Day 1-4 rows (Shortage alert type only)
+                day_mask = shortage_df['ALERT_DETAILS'].str.contains(r'Day [1-4]\b', case=False, na=False)
+                normal_df = shortage_df[day_mask].copy()
                 normal_df['ALERT_DETAILS'] = normal_df['ALERT_DETAILS'].str.extract(r'(Day [1-4])\b', expand=False)
 
-                # PIWED rows: parse Prod.Day=YYYY-MM-DD from COMMENTS, include if 1-4 days out
+                # PIWED rows: search the full unfiltered data — these may have a different ALERT_TYPE
                 piwed_candidates = pd.DataFrame()
                 piwed_mask = alertdf['ALERT_DETAILS'].str.contains(
                     r'PIWED below zero using GC ETA', case=False, na=False
@@ -2062,6 +2064,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 # Remove duplicates where the same part already appears at the same day level
                 if 'PART' in alertdf.columns and not alertdf.empty:
                     alertdf = alertdf.drop_duplicates(subset=['PART', 'ALERT_DETAILS'], keep='first')
+            else:
+                alertdf = shortage_df
 
             if alertdf.empty:
                 QMessageBox.information(self, "No Data", "No Shortage alert rows for Day 1-4 found in the alert report")
