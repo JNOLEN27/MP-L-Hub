@@ -2278,11 +2278,16 @@ class SupplyChainCoordinationWindow(QMainWindow):
     def displayalertstable(self, alertdf: pd.DataFrame):
         if alertdf.empty:
             return
- 
+
+        try:
+            self.alertstable.itemChanged.disconnect()
+        except Exception:
+            pass
+
         cols = alertdf.columns.tolist()
         n_rows, n_cols = len(alertdf), len(cols)
         editable_indices = {i for i, c in enumerate(cols) if c in self._ALERT_EDITABLE_COLS}
- 
+
         self.alertstable.setSortingEnabled(False)
         self.alertstable.setUpdatesEnabled(False)
  
@@ -2341,11 +2346,16 @@ class SupplyChainCoordinationWindow(QMainWindow):
     def displaypiwdtable(self, piwddf: pd.DataFrame):
         if piwddf.empty:
             return
-        
+
+        try:
+            self.piwdtable.itemChanged.disconnect()
+        except Exception:
+            pass
+
         cols = piwddf.columns.tolist()
         n_rows, n_cols = len(piwddf), len(cols)
         editable_indices = {i for i, c in enumerate(cols) if c in self._PIWD_EDITABLE_COLS}
-        
+
         self.piwdtable.setSortingEnabled(False)
         self.piwdtable.setUpdatesEnabled(False)
         
