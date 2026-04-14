@@ -2,7 +2,7 @@ import json
 import re
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog, QTableView, QSpinBox)
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog, QTableView, QSpinBox, QMenu, QAction)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QEvent
 from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, timedelta
@@ -12,6 +12,15 @@ from app.supply_chain_coordination.coverage_analysis import CoverageAnalysisEngi
 from app.supply_chain_coordination.waterfall_analysis import WaterfallAnalysisEngine
 from app.supply_chain_coordination.ldjis_coverage import LDJISCoverageEngine
  
+class NumericSortTableWidgetItem(QTableWidgetItem):
+    def __init__(self, text, sort_value):
+        super().__init__(text)
+        self.sort_value = sort_value
+
+    def __lt__(self, other):
+        if isinstance(other, NumericSortTableWidgetItem):
+            return self.sort_value < other.sort_value
+        return super().__lt__(other)
  
 class SupplyChainCoordinationWindow(QMainWindow):
     def __init__(self, userdata, parent=None):
@@ -26,10 +35,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._alerts_cache = None
         self._piwd_cache = None
         self.setWindowTitle("Supply Chain Coordination Application")
-        # Compute DPI-aware heights for the filter sections.
-        # Design reference is 96 DPI (Windows 100 % scaling).  On higher-DPI
-        # screens the font metrics demand more pixels, so we scale up.
-        self._dropdowns = []   # all SimpleMultiSelectFilter instances, for live updates
+        self._dropdowns = []
         self._recalc_filter_heights(QApplication.primaryScreen())
         self.resize(*APPWINDOWSIZE)
         self.setupui()
@@ -643,6 +649,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             max_display_rows = 2000
             if len(filtereddf) > max_display_rows:
                 filtereddf = filtereddf.head(max_display_rows)
+
+            self.currentlydisplayeddf = filtereddf.copy()
  
             self.displaycoveragetable(filtereddf)
  
@@ -665,7 +673,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._clearpartlistfilter(refilter=False)
 
         if hasattr(self, 'originalcoveragedf'):
-            self.displaycoveragetable(self.originalcoveragedf)
+            self.currentcoveragedf = self.originalcoveragedf.copy()
+            self.displaycoveragetable(self.currentcoveragedf)
 
     def _clearpartlistfilter(self, refilter=True):
         """Clear the part list paste filter.  Pass refilter=False when called
@@ -704,6 +713,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         exportbtn = QPushButton("Export to CSV")
         exportbtn.clicked.connect(self.exportcoveragetable)
         buttonlayout.addWidget(exportbtn)
+
+        resetsortbtn = QPushButton("Reset Sort")
+        resetsortbtn.clicked.connect(self.resetcoveragetablesort)
+        buttonlayout.addWidget(resetsortbtn)
 
         freezelabel = QLabel("Freeze:")
         freezelabel.setContentsMargins(8, 0, 2, 0)
@@ -1764,7 +1777,19 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     else:
                         display_value = str(value) if value is not None else ""
  
-                    item = QTableWidgetItem(display_value)
+                    if cols[col] == 'Day Alert':
+                        try:
+                            sort_value = int(value)
+                        except (ValueError, TypeError):
+                            text = str(display_value).strip()
+                            if text.lower() == 'covered':
+                                sort_value = 999
+                            else:
+                                m = re.search(r'(\d+)', text)
+                                sort_value = int(m.group(1)) if m else 999999
+                        item = NumericTableWidgetItem(display_value, sort_value)
+                    else:
+                        item = QTableWidgetItem(display_value)
                     item.setFlags(
                         (item.flags() | Qt.ItemIsEditable)
                         if col == self.comments_col
@@ -1967,7 +1992,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             elif transaction['Transaction Type'] == 'Req':
                 typeitem.setBackground(QColor(255, 204, 204))
                 typeitem.setForeground(QColor(156, 0, 6))
-            elif transaction['Transaction Type'] == 'GR':
+            elif transaction['Transaction Type'] == 'ASN':
                 typeitem.setBackground(QColor(204, 255, 204))
                 typeitem.setForeground(QColor(0, 156, 6))
  
@@ -2463,6 +2488,20 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
             else:
                 QMessageBox.critical(self, "Export Failed", "Could not export file.")
+
+    def resetcoveragetablesort(self):
+        if not hasattr(self, 'currentcoveragedf') or self.currentcoveragedf.empty:
+            return
+
+        self.coveragetable.setSortingEnabled(False)
+        self.displaycoveragetable(self.currentcoveragedf)
+
+        header = self.coveragetable.horizontalHeader()
+        try:
+            header.setSortIndicator(-1, Qt.AscendingOrder)
+        except Exception:
+            pass
  
     def closeEvent(self, event):
         event.accept()
+    

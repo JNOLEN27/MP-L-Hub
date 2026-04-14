@@ -629,7 +629,7 @@ class CoverageAnalysisEngine:
                     currentqty += receipt['quantity']
                     transactions.append({
                         'Date': datestr,
-                        'Transaction Type': 'GR',
+                        'Transaction Type': 'ASN',
                         'Receipt/Reqmt': f"+{receipt['quantity']:,}",
                         'Available QTY': currentqty,
                         'ASN': '',
