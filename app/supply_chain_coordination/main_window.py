@@ -1787,7 +1787,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                             else:
                                 m = re.search(r'(\d+)', text)
                                 sort_value = int(m.group(1)) if m else 999999
-                        item = NumericTableWidgetItem(display_value, sort_value)
+                        item = NumericSortTableWidgetItem(display_value, sort_value)
                     else:
                         item = QTableWidgetItem(display_value)
                     item.setFlags(
