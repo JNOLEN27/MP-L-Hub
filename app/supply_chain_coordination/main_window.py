@@ -2037,9 +2037,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
                 # PIWED rows: search the full unfiltered data — these may have a different ALERT_TYPE
                 piwed_candidates = pd.DataFrame()
-                piwed_mask = alertdf['ALERT_DETAILS'].str.contains(
-                    r'PIWED below zero using GC ETA', case=False, na=False
-                )
+                piwed_mask = alertdf['ALERT_DETAILS'].str.contains(r'PIWED below zero using GC ETA', case=False, na=False) | \
+                             alertdf['ALERT_DETAILS'].str.contains(r'PIWD below zero', case=False, na=False) | \
+                            alertdf['ALERT_DETAILS'].str.contains(r'PIWDCS below zero', case=False, na=False)
                 if piwed_mask.any() and 'COMMENTS' in alertdf.columns:
                     piwed_df = alertdf[piwed_mask].copy()
 
@@ -2058,7 +2058,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     piwed_df['ALERT_DETAILS'] = piwed_df['COMMENTS'].apply(_piwed_day_label)
                     piwed_candidates = piwed_df[piwed_df['ALERT_DETAILS'].notna()].copy()
 
-                # Combine: normal rows first so they win on dedup
                 alertdf = pd.concat([normal_df, piwed_candidates], ignore_index=True)
 
                 # Remove duplicates where the same part already appears at the same day level
