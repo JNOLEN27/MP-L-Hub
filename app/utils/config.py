@@ -26,8 +26,8 @@ def getsharednetworkpath() -> Path:
 
 SHAREDNETWORKPATH = getsharednetworkpath()
 
-ACCESSREQUESTSFILE = CONFIGPATH / "access_requests.json"
-USERPERMISSIONSFILE = CONFIGPATH / "user_permissions.json"
+ACCESSREQUESTSFILE = SHAREDNETWORKPATH / "config" / "access_requests.json"
+USERPERMISSIONSFILE = SHAREDNETWORKPATH / "config" / "user_permissions.json"
 
 FORECATSDIR = SHAREDNETWORKPATH / "forecasts"
 ARCHIVEDIR = SHAREDNETWORKPATH / "archive"
