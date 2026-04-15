@@ -1,11 +1,3 @@
-"""
-Maintenance tab for Supply Chain Coordination — admin/power-user only.
-
-Three sub-tabs:
-  1. Column Mapping   — remap what column names the coverage engine reads
-  2. Inventory Adjustments — override Initial_Stock for a part (quality fallouts, etc.)
-  3. Delivery Adjustments  — edit delivery quantities or inject expedites
-"""
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
     QLineEdit, QTextEdit, QTableWidget, QTableWidgetItem, QTabWidget,
@@ -18,11 +10,6 @@ from PyQt5.QtGui import QFont, QColor
 from app.supply_chain_coordination.adjustment_store import (
     AdjustmentStore, COLUMN_MAPPING_DEFAULTS, COLUMN_MAPPING_META,
 )
-
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
 
 _HDR_STYLE = (
     "QLabel { background-color: #d0e8f8; color: #1a3a6b; font-weight: bold;"
@@ -64,17 +51,10 @@ def _noneditable_item(text: str) -> QTableWidgetItem:
     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
     return item
 
-
-# ---------------------------------------------------------------------------
-# Sub-tab 1 — Column Mapping
-# ---------------------------------------------------------------------------
-
 class ColumnMappingTab(QWidget):
-    """UI for remapping logical field keys to actual column names in imports."""
-
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._line_edits = {}   # logical_key → QLineEdit
+        self._line_edits = {}   
         self._build_ui()
         self._load_saved()
 
@@ -83,7 +63,6 @@ class ColumnMappingTab(QWidget):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(8)
 
-        # ── info banner ──────────────────────────────────────────────────
         info = QLabel(
             "Changes saved here apply to ALL users on their next Generate Coverage run."
             "  Only modify a value if the source file's column name has changed."
@@ -95,7 +74,6 @@ class ColumnMappingTab(QWidget):
         )
         root.addWidget(info)
 
-        # ── buttons ──────────────────────────────────────────────────────
         btnrow = QHBoxLayout()
         self._save_btn = QPushButton("Save Mapping")
         self._save_btn.setStyleSheet(_BTN_PRIMARY)
@@ -113,7 +91,6 @@ class ColumnMappingTab(QWidget):
         btnrow.addStretch()
         root.addLayout(btnrow)
 
-        # ── scrollable grid ──────────────────────────────────────────────
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         container = QWidget()
@@ -124,7 +101,6 @@ class ColumnMappingTab(QWidget):
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(2, 1)
 
-        # header row
         for col, txt in enumerate(["Group / Field", "Current Column Name", "Default"]):
             lbl = QLabel(txt)
             lbl.setFont(QFont("Arial", 9, QFont.Bold))
@@ -191,11 +167,6 @@ class ColumnMappingTab(QWidget):
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(3000, lambda: self._status_label.setText(""))
 
-
-# ---------------------------------------------------------------------------
-# Sub-tab 2 — Inventory Adjustments
-# ---------------------------------------------------------------------------
-
 class InventoryAdjustmentsTab(QWidget):
 
     def __init__(self, import_manager, userdata, parent=None):
@@ -210,7 +181,6 @@ class InventoryAdjustmentsTab(QWidget):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
 
-        # ── banner ───────────────────────────────────────────────────────
         info = QLabel(
             "Override a part's calculated initial inventory (e.g. after a quality fallout). "
             "The override replaces the sum of Beginning + Yard + Port inventory for that part. "
@@ -225,7 +195,6 @@ class InventoryAdjustmentsTab(QWidget):
 
         splitter = QSplitter(Qt.Vertical)
 
-        # ── add override form ────────────────────────────────────────────
         form_widget = QWidget()
         form_widget.setMaximumHeight(200)
         form_layout = QVBoxLayout(form_widget)
@@ -277,7 +246,6 @@ class InventoryAdjustmentsTab(QWidget):
 
         splitter.addWidget(form_widget)
 
-        # ── history table ────────────────────────────────────────────────
         hist_widget = QWidget()
         hist_layout = QVBoxLayout(hist_widget)
         hist_layout.setContentsMargins(0, 0, 0, 0)
@@ -392,18 +360,13 @@ class InventoryAdjustmentsTab(QWidget):
         AdjustmentStore.deactivate_inventory_override(record_id)
         self._refresh_history()
 
-
-# ---------------------------------------------------------------------------
-# Sub-tab 3 — Delivery Adjustments
-# ---------------------------------------------------------------------------
-
 class DeliveryAdjustmentsTab(QWidget):
 
     def __init__(self, import_manager, userdata, parent=None):
         super().__init__(parent)
         self._im = import_manager
         self._username = userdata.get('username', 'unknown')
-        self._search_results = []   # list of dicts for the current search
+        self._search_results = []  
         self._build_ui()
         self._refresh_history()
 
@@ -412,7 +375,6 @@ class DeliveryAdjustmentsTab(QWidget):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
 
-        # ── banner ───────────────────────────────────────────────────────
         info = QLabel(
             "Edit existing delivery quantities (e.g. 800 planned, 300 shipped) or "
             "add expedite deliveries that don't appear in the import reports. "
@@ -427,7 +389,6 @@ class DeliveryAdjustmentsTab(QWidget):
 
         top_splitter = QSplitter(Qt.Horizontal)
 
-        # ── LEFT: Edit existing ──────────────────────────────────────────
         edit_widget = QWidget()
         edit_layout = QVBoxLayout(edit_widget)
         edit_layout.setContentsMargins(0, 0, 0, 0)
@@ -486,7 +447,6 @@ class DeliveryAdjustmentsTab(QWidget):
         edit_layout.addStretch()
         top_splitter.addWidget(edit_widget)
 
-        # ── RIGHT: Add expedite ──────────────────────────────────────────
         add_widget = QWidget()
         add_layout = QVBoxLayout(add_widget)
         add_layout.setContentsMargins(0, 0, 0, 0)
@@ -539,7 +499,6 @@ class DeliveryAdjustmentsTab(QWidget):
         top_splitter.setSizes([500, 360])
         root.addWidget(top_splitter)
 
-        # ── history table ────────────────────────────────────────────────
         hist_hdr = QHBoxLayout()
         hist_lbl = QLabel("Adjustment History")
         hist_lbl.setStyleSheet(_HDR_STYLE)
@@ -558,8 +517,6 @@ class DeliveryAdjustmentsTab(QWidget):
         self._hist_table.setSortingEnabled(False)
         root.addWidget(self._hist_table)
 
-    # ── search & edit helpers ────────────────────────────────────────────
-
     def _source_key(self, combo: QComboBox) -> str:
         return "splunk" if combo.currentIndex() == 0 else "goods_to_be_received"
 
@@ -577,7 +534,6 @@ class DeliveryAdjustmentsTab(QWidget):
                 QMessageBox.information(self, "No Data", f"No data found for {category}.")
                 return
 
-            # Resolve column names
             if source_key == "splunk":
                 col_part = mapping.get("splunk.part_no", "Part Number")
                 col_date = mapping.get("splunk.date",    "Load Delivery Date Final")
@@ -734,11 +690,6 @@ class DeliveryAdjustmentsTab(QWidget):
     def _deactivate(self, record_id: str):
         AdjustmentStore.deactivate_delivery_adjustment(record_id)
         self._refresh_history()
-
-
-# ---------------------------------------------------------------------------
-# MaintenanceTab — container shown in the SCC window
-# ---------------------------------------------------------------------------
 
 class MaintenanceTab(QWidget):
 

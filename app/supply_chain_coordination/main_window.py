@@ -36,6 +36,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._piwd_cache = None
         self.setWindowTitle("Supply Chain Coordination Application")
         self._dropdowns = []
+        self._hidden_coverage_columns = set()
+        self._coverage_column_menu = None
         self._recalc_filter_heights(QApplication.primaryScreen())
         self.resize(*APPWINDOWSIZE)
         self.setupui()
@@ -134,12 +136,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.statusBar().showMessage(f"Logged in as: {self.userdata['username']}")
         centralwidget.setLayout(layout)
 
-    # ------------------------------------------------------------------
-    # DPI-aware filter-section sizing
-    # ------------------------------------------------------------------
-
     def _recalc_filter_heights(self, screen):
-        """Recompute _filter_section_h and _dropdown_h from *screen*'s DPI."""
         dpi = screen.logicalDotsPerInch() if screen else 96.0
         scale = max(0.75, min(2.0, dpi / 96.0))
         self._filter_section_h = int(190 * scale)
@@ -147,13 +144,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # Connect to the native window's screenChanged signal exactly once.
         if not getattr(self, '_screen_signal_connected', False):
             win = self.windowHandle()
             if win is not None:
                 win.screenChanged.connect(self._on_screen_changed)
                 self._screen_signal_connected = True
-        # Recompute immediately for whichever screen the window lands on.
         screen = QApplication.screenAt(self.geometry().center())
         if screen:
             self._recalc_filter_heights(screen)
@@ -165,7 +160,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._reapply_filter_heights()
 
     def _reapply_filter_heights(self):
-        """Push the current _filter_section_h / _dropdown_h to all live widgets."""
         if hasattr(self, 'filtersection'):
             self.filtersection.setMaximumHeight(self._filter_section_h)
         if hasattr(self, 'alertfiltersection'):
@@ -224,8 +218,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         layout.addWidget(searchgridwidget)
 
-        # Part number list filter — paste a block of part numbers to filter to
-        # only those rows.  Accepts one-per-line or comma/semicolon-separated.
         partlistwidget = QWidget()
         partlistlayout = QVBoxLayout(partlistwidget)
         partlistlayout.setContentsMargins(5, 5, 5, 5)
@@ -258,7 +250,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
         layout.addWidget(partlistwidget)
 
-        # Debounce so we don't refilter on every keystroke while typing/pasting
         self._partlist_timer = QTimer()
         self._partlist_timer.setSingleShot(True)
         self._partlist_timer.setInterval(400)
@@ -321,7 +312,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         return widget
  
     def createmultiselectdropdown(self, placeholdertext, filtertype="SCC"):
-        dropdown_h = self._dropdown_h  # captured for closure; updated live via _dropdowns list
+        dropdown_h = self._dropdown_h
         class SimpleMultiSelectFilter(QWidget):
             selectionChanged = pyqtSignal()
 
@@ -602,7 +593,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             if hasattr(self, '_partlist_textedit'):
                 raw = self._partlist_textedit.toPlainText().strip()
                 if raw and 'Part Number' in filtereddf.columns:
-                    # Accept newlines, commas, semicolons, and tabs as separators
                     normalized = raw.replace(',', '\n').replace(';', '\n').replace('\t', '\n')
                     partnums = {p.strip().upper() for p in normalized.splitlines() if p.strip()}
                     if partnums:
@@ -714,6 +704,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         exportbtn.clicked.connect(self.exportcoveragetable)
         buttonlayout.addWidget(exportbtn)
 
+        columnsbtn = QPushButton("Columns")
+        columnsbtn.clicked.connect(self.showcoveragecolumnmenu)
+        buttonlayout.addWidget(columnsbtn)
+        self._coverage_column_menu = columnsbtn
+
         resetsortbtn = QPushButton("Reset Sort")
         resetsortbtn.clicked.connect(self.resetcoveragetablesort)
         buttonlayout.addWidget(resetsortbtn)
@@ -744,8 +739,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             lambda _col, _old, _new: self._update_frozen_geometry())
         layout.addWidget(self.coveragetable)
 
-        # Frozen column overlay — a QTableView sharing the same model, positioned
-        # as a child of coveragetable so it floats over the first N columns.
         self._frozen_view = QTableView(self.coveragetable)
         self._frozen_view.setFocusPolicy(Qt.NoFocus)
         self._frozen_view.verticalHeader().hide()
@@ -757,26 +750,104 @@ class SupplyChainCoordinationWindow(QMainWindow):
             " border: 1px solid #d0d0d0; font-weight: bold; }"
         )
         self._frozen_view.hide()
-        self.coveragetable.verticalScrollBar().valueChanged.connect(
-            self._frozen_view.verticalScrollBar().setValue)
+        self._frozen_view.viewport().installEventFilter(self)
         self.coveragetable.installEventFilter(self)
 
         widget.setLayout(layout)
         return widget
 
+    def showcoveragecolumnmenu(self):
+        if self.coveragetable.columnCount() == 0:
+            return
+        
+        menu = QMenu()
+
+        showallaction = QAction("Show All Columns", self)
+        showallaction.triggered.connect(self.showallcoveragecolumns)
+        menu.addAction(showallaction)
+
+        menu.addSeparator()
+
+        for col in range(self.coveragetable.columnCount()):
+            headeritem = self.coveragetable.horizontalHeaderItem(col)
+            if not headeritem:
+                continue
+            
+            colname = headeritem.text()
+            action = QAction(colname, self)
+            action.setCheckable(True)
+            action.setChecked(col not in self._hidden_coverage_columns)
+            action.toggled.connect(lambda checked, name=colname: self.setcoveragecolumnvisibility(name, checked))
+            menu.addAction(action)
+        
+        menu.exec_(self._coverage_column_menu.mapToGlobal(self._coverage_column_menu.rect().bottomLeft()))
+
+    def setcoveragecolumnvisible(self, columnname, visible):
+        colindex = self._getcoveragecolumnindex(columnname)
+        if colindex is None:
+            return
+        
+        self.coveragetable.setColumnHidden(colindex, not visible)
+
+        if hasattr(self, '_frozen_view') and self._frozen_view.model() is not None:
+            self._frozen_view.setColumnHidden(colindex, not visible)
+
+        if visible:
+            self._hidden_coverage_columns.discard(colindex)
+        else:
+            self._hidden_coverage_columns.add(colindex)
+        
+        self._update_frozen_geometry()
+
+    def showallcoveragecolumns(self):
+        if self.coveragetable.columnCount() == 0:
+            return
+        
+        self._hidden_coverage_columns.clear()
+
+        for col in range(self.coveragetable.columnCount()):
+            self.coveragetable.setColumnHidden(col, False)
+            if hasattr(self, '_frozen_view') and self._frozen_view.model() is not None:
+                self._frozen_view.setColumnHidden(col, False)
+        
+        self._update_frozen_geometry()
+
+    def _getcoveragecolumnindex(self, columnname):
+        for col in range(self.coveragetable.columnCount()):
+            item = self.coveragetable.horizontalHeaderItem(col)
+            if item and item.text() == columnname:
+                return col
+        return None
+
+    def _reapplycoveragehiddencolumns(self):
+        if self.coveragetable.columnCount() == 0:
+            return
+        
+        for col in range(self.coveragetable.columnCount()):
+            item = self.coveragetable.horizontalHeaderItem(col)
+            if not item:
+                continue
+            
+            colname = item.text()
+            hidden = colname in self._hidden_coverage_columns
+            self.coveragetable.setColumnHidden(col, hidden)
+
+            if hasattr(self, '_frozen_view') and self._frozen_view.model() is not None:
+                self._frozen_view.setColumnHidden(col, hidden)
+
+        self._update_frozen_geometry()
+
     def _setfrozencolumns(self, n):
-        """Show/hide the frozen column overlay for the first *n* columns."""
         self._frozen_col_count = n
         ct = self.coveragetable
         fv = self._frozen_view
-        # Re-bind model in case setColumnCount() swapped the internal model
         if fv.model() is not ct.model():
             fv.setModel(ct.model())
         ncols = ct.columnCount()
         if n == 0 or ncols == 0:
             fv.hide()
             return
-        n = min(n, ncols - 1)   # always keep at least one scrollable column
+        n = min(n, ncols - 1)
         self._frozen_col_count = n
         for c in range(ncols):
             fv.setColumnHidden(c, c >= n)
@@ -785,7 +856,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
         fv.raise_()
 
     def _update_frozen_geometry(self):
-        """Resize and reposition the frozen view to align with the main table."""
         n = self._frozen_col_count
         ct = self.coveragetable
         fv = self._frozen_view
@@ -802,6 +872,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         fv.setGeometry(vhw + fw, fw, frozen_width, ct.viewport().height() + hh)
 
     def eventFilter(self, obj, event):
+        if obj is self._frozen_view: and event.type() == QEvent.Wheel:
+            QApplication.sendEvent(self.coveragetable.viewport(), event)
+            return True
         if obj is self.coveragetable and event.type() == QEvent.Resize:
             self._update_frozen_geometry()
         return super().eventFilter(obj, event)
@@ -836,7 +909,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
         searchsection = self.createpartsearchsection()
         layout.addWidget(searchsection)
 
-        # Part info and notes sit side by side
         inforow = QHBoxLayout()
         self.partinfosection = self.createpartinfosection()
         inforow.addWidget(self.partinfosection, stretch=2)
@@ -1111,6 +1183,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         clearbtn.clicked.connect(self.clearpartsearch)
         clearbtn.setStyleSheet("""QPushButton {background-color: #E97132; color: white; padding: 8px 16px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #da190b;}""")
         layout.addWidget(clearbtn)
+
+        exportbtn = QPushButton("Export Transactions")
+        exportbtn.clicked.connect(self.exporttransactiontable)
+        exportbtn.setStyleSheet("""QPushButton {background-color: #1976D2; color: white; padding: 8px 16px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #1565C0;}""")
+        layout.addWidget(exportbtn)
  
         layout.addStretch()
         widget.setLayout(layout)
@@ -1454,10 +1531,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.partnotestextbox.blockSignals(False)
         self._currentpartnumber = None
 
-    # ------------------------------------------------------------------ #
-    #  Individual Part Notes                                              #
-    # ------------------------------------------------------------------ #
-
     def _createpartnotessection(self):
         widget = QWidget()
         widget.setMaximumHeight(200)
@@ -1475,7 +1548,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
         )
         layout.addWidget(self.partnotestextbox)
 
-        # Debounce timer: saves 600 ms after the user stops typing
         self._notessavetimer = QTimer()
         self._notessavetimer.setSingleShot(True)
         self._notessavetimer.setInterval(600)
@@ -1819,6 +1891,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.coveragetable.setSortingEnabled(True)
             self.coveragetable.itemChanged.connect(self.oncommentchanged)
             self._setfrozencolumns(self._frozen_col_count)
+            self._reapplycoveragehiddencolumns()
  
     def oncommentchanged(self, item):
         try:
@@ -1846,10 +1919,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         except Exception as e:
             print(f"Error saving comment: {e}")
-
-    # ------------------------------------------------------------------ #
-    #  Alerts Breakdown persistence                                        #
-    # ------------------------------------------------------------------ #
 
     def _alertsfile(self):
         return getsharednetworkpath() / "alertsdata.json"
@@ -1910,10 +1979,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.alertstable.resizeRowToContents(item.row())
         except Exception as e:
             print(f"Error saving alert change: {e}")
-
-    # ------------------------------------------------------------------ #
-    #  PIWD persistence                                                    #
-    # ------------------------------------------------------------------ #
 
     def _piwdfile(self):
         return getsharednetworkpath() / "piwddata.json"
@@ -2017,6 +2082,23 @@ class SupplyChainCoordinationWindow(QMainWindow):
             asnitem = QTableWidgetItem(transaction['ASN'])
             asnitem.setFlags(asnitem.flags() & ~Qt.ItemIsEditable)
             self.transactiontable.setItem(row, 4, asnitem)
+
+    def exporttransactiontable(self):
+        if not hasattr(self, 'transactiontable') or self.transactiontable.rowCount() == 0:
+            QMessageBox.warning(self, "No Data", "Generate transaction breakdown first.")
+            return
+ 
+        filename, _ = QFileDialog.getSaveFileName(self, "Export Transaction Breakdown", f"Transaction_Breakdown_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", "CSV files (*.csv)")
+        if filename:
+            try:
+                cols = [self.transactiontable.horizontalHeaderItem(c).text() for c in range(self.transactiontable.columnCount())]
+                rows = []
+                for r in range(self.transactiontable.rowCount()):
+                    rows.append([self.transactiontable.item(r, c).text() if self.transactiontable.item(r, c) else '' for c in range(self.transactiontable.columnCount())])
+                pd.DataFrame(rows, columns=cols).to_csv(filename, index=False)
+                QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
+            except Exception as e:
+                QMessageBox.critical(self, "Export Failed", str(e))
  
     _ALERT_COL_MAP = {
         'SCC_NAME':            'SCC',
@@ -2055,12 +2137,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
             if 'ALERT_DETAILS' in alertdf.columns:
                 today = datetime.now().date()
 
-                # Normal Day 1-4 rows (Shortage alert type only)
                 day_mask = shortage_df['ALERT_DETAILS'].str.contains(r'Day [1-4]\b', case=False, na=False)
                 normal_df = shortage_df[day_mask].copy()
                 normal_df['ALERT_DETAILS'] = normal_df['ALERT_DETAILS'].str.extract(r'(Day [1-4])\b', expand=False)
 
-                # PIWED rows: search the full unfiltered data — these may have a different ALERT_TYPE
                 piwed_candidates = pd.DataFrame()
                 piwed_mask = alertdf['ALERT_DETAILS'].str.contains(r'PIWED below zero using GC ETA', case=False, na=False) | \
                              alertdf['ALERT_DETAILS'].str.contains(r'PIWD below zero', case=False, na=False) | \
@@ -2075,7 +2155,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                         if not m:
                             return None
                         try:
-                            diff = (datetime.strptime(m.group(1), '%Y-%m-%d').date() - today).days
+                            diff = (datetime.strptime(m.group(1), '%Y-%m-%d').date() - today + timedelta(days=1)).days
                             return f'Day {diff}' if 1 <= diff <= 4 else None
                         except ValueError:
                             return None
@@ -2085,7 +2165,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
                 alertdf = pd.concat([normal_df, piwed_candidates], ignore_index=True)
 
-                # Remove duplicates where the same part already appears at the same day level
                 if 'PART' in alertdf.columns and not alertdf.empty:
                     alertdf = alertdf.drop_duplicates(subset=['PART', 'ALERT_DETAILS'], keep='first')
             else:
@@ -2101,8 +2180,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             for col in self._ALERT_EDITABLE_COLS:
                 displaydf[col] = ''
 
-            # Load previously saved editable values from shared drive, pruning
-            # any entries whose Part|Alert key is no longer in the current report
             saved = self._loadalertsdata()
             if 'Part' in displaydf.columns and 'Alerts' in displaydf.columns:
                 current_keys = {
@@ -2123,7 +2200,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
                                 if col in displaydf.columns:
                                     displaydf.at[idx, col] = val
 
-            # Compute Region from Country
             if 'Country' in displaydf.columns:
                 displaydf['Region'] = displaydf['Country'].apply(
                     self.coverageengine.determineregion
@@ -2131,7 +2207,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             else:
                 displaydf['Region'] = ''
 
-            # Merge Program Supported from part_matrix
             try:
                 partmatrix = self.import_manager.loaddata('part_matrix')
                 if not partmatrix.empty and 'Part No' in partmatrix.columns:
@@ -2160,7 +2235,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             except Exception:
                 displaydf['Program Supported'] = ''
 
-            # Reorder columns: Country/Region/Program Supported after Req, before Supplier
             preferred_order = [
                 'Alerts', 'Part', 'Part Description', 'Inv', 'Yard', 'Req',
                 'Country', 'Region', 'Program Supported', 'Supplier', 'SCC',
@@ -2504,4 +2578,3 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def closeEvent(self, event):
         event.accept()
-    

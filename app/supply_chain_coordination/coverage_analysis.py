@@ -6,11 +6,6 @@ from typing import Dict, List, Tuple, Optional
 
 
 def _normalize_df(df: pd.DataFrame, data_key: str, mapping: dict) -> pd.DataFrame:
-    """Rename actual column names to the engine's expected defaults using the column mapping.
-
-    mapping: {logical_key: actual_col_name}  (from AdjustmentStore.load_column_mapping())
-    Only renames columns that differ from the default and exist in *df*.
-    """
     from app.supply_chain_coordination.adjustment_store import COLUMN_MAPPING_DEFAULTS
     key_prefix = {
         'current_inventory_report': 'inv.',
@@ -37,11 +32,6 @@ def _normalize_df(df: pd.DataFrame, data_key: str, mapping: dict) -> pd.DataFram
 
 
 def _apply_delivery_adjustments(df: pd.DataFrame, source: str) -> pd.DataFrame:
-    """Apply active delivery edits and adds from the adjustment store to *df*.
-
-    source: 'splunk' | 'goods_to_be_received'
-    Columns in *df* are assumed to already be normalized to their default names.
-    """
     from app.supply_chain_coordination.adjustment_store import AdjustmentStore, COLUMN_MAPPING_DEFAULTS
     adjustments = [
         r for r in AdjustmentStore.load_delivery_adjustments()
@@ -66,7 +56,6 @@ def _apply_delivery_adjustments(df: pd.DataFrame, source: str) -> pd.DataFrame:
 
     df = df.copy()
 
-    # ---- edits: match part_no + date, replace qty ----
     for rec in (r for r in adjustments if r['type'] == 'edit'):
         part_mask = df[part_col].astype(str).str.upper().str.strip() == rec['part_no'].upper()
         try:
@@ -77,7 +66,6 @@ def _apply_delivery_adjustments(df: pd.DataFrame, source: str) -> pd.DataFrame:
         if matches.any() and qty_col in df.columns:
             df.loc[matches, qty_col] = rec['adjusted_qty']
 
-    # ---- adds: append new rows ----
     add_records = [r for r in adjustments if r['type'] == 'add']
     if add_records and qty_col in df.columns:
         new_rows = []
@@ -335,7 +323,7 @@ class CoverageAnalysisEngine:
             'GERMANY', 'HUNGARY', 'IRELAND', 'ITALY', 'LITHUANIA', 'MOROCCO',
             'NETHERLANDS', 'NORWAY', 'POLAND', 'PORTUGAL', 'ROMANIA', 'SLOVAK REPUBLIC',
             'SLOVENIA', 'SPAIN', 'SWEDEN', 'SWITZERLAND', 'TUNISIA', 'TURKEY',
-            'UKRAINE', 'UNITED KINGDOM',
+            'UKRAINE', 'UNITED KINGDOM', 'SERBIA',
         ):
             return 'EMEA'
         if country in ('CHINA', 'SOUTH KOREA', 'THAILAND', 'VIETNAM'):
@@ -423,7 +411,6 @@ class CoverageAnalysisEngine:
  
         coveragedf['Initial_Stock'] = coveragedf['Initial_Stock'].fillna(0)
 
-        # Apply inventory overrides from the Maintenance tab (active records only)
         try:
             from app.supply_chain_coordination.adjustment_store import AdjustmentStore
             overrides = {
@@ -476,8 +463,8 @@ class CoverageAnalysisEngine:
  
         last_col = day0_col
 
-        pending_receipts: Dict = {}    # part_no_upper -> accumulated qty from skipped weekend dates
-        pending_consumption: Dict = {} # part_no        -> accumulated qty from skipped weekend dates
+        pending_receipts: Dict = {}
+        pending_consumption: Dict = {}
 
         for dayoffset in range(1, daysforward):
             date = today + timedelta(days=dayoffset)
@@ -485,7 +472,6 @@ class CoverageAnalysisEngine:
             daily_receipts = receiptdata.get(date, pd.Series(dtype=float))
             daily_consumption = consumptiondata.get(date, pd.Series(dtype=float))
 
-            # Accumulate into pending so weekend data rolls into the next weekday column
             if not daily_receipts.empty:
                 for pn, qty in daily_receipts.items():
                     pending_receipts[pn] = pending_receipts.get(pn, 0) + float(qty)
@@ -500,7 +486,6 @@ class CoverageAnalysisEngine:
             colname = f'Day_{dayoffset:03d}_{datestr}'
             prevcol = last_col
 
-            # Snapshot pending dicts for capture in closure
             snap_receipts = dict(pending_receipts)
             snap_consumption = dict(pending_consumption)
 
@@ -524,7 +509,6 @@ class CoverageAnalysisEngine:
                 coveragedf[colname] = 0
                 last_col = colname
 
-            # Reset pending after applying to this weekday column
             pending_receipts = {}
             pending_consumption = {}
  
@@ -577,7 +561,6 @@ class CoverageAnalysisEngine:
                 ).fillna(0).sum()
                 initialstock = int(beginv + yardinv + portinv)
 
-        # Apply inventory overrides from the Maintenance tab (same as addinitialstock)
         try:
             from app.supply_chain_coordination.adjustment_store import AdjustmentStore
             overrides = {
@@ -711,7 +694,6 @@ class CoverageAnalysisEngine:
         if splunkdf.empty or 'Part Number' not in splunkdf.columns:
             return receiptbydate
  
-        # Normalize the same way parsesplunkreceivingdata does, so .0 float artifacts match
         import re as _re
         target = _re.sub(r'\.0$', '', partnumber.strip()).upper()
         normalized = splunkdf['Part Number'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).str.upper()
@@ -843,7 +825,6 @@ class CoverageAnalysisEngine:
             if sample_date:
                 sample_parts = list(receiptbydate[sample_date].index[:5])
                 print(f"[Splunk] Sample parts on {sample_date}: {sample_parts}")
-            # Also check how many rows were dropped due to NaN part number
             nan_parts = (df['_part'] == 'NAN').sum() if len(df) > 0 else 0
             print(f"[Splunk] Rows with NAN part after filter: {nan_parts}")
             return receiptbydate

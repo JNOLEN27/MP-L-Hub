@@ -3,36 +3,26 @@ import uuid
 from datetime import datetime
 from app.utils.config import SHAREDNETWORKPATH
 
-
-# Maps logical field key → default actual column name used in imports.
-# These match the current hardcoded column names in coverage_analysis.py.
 COLUMN_MAPPING_DEFAULTS = {
-    # current_inventory_report
     "inv.part_no":   "PART_NO",
     "inv.beginning": "BEGINNING_INVENTORY_TODAY",
     "inv.yard":      "INVENTORY_YARD_TODAY",
     "inv.port":      "INVENTORY_PORT_TODAY",
-    # master_data (engine already handles aliases for the part key itself)
     "md.unit_load":       "UNIT_LOAD_QTY",
     "md.safety_days":     "SAFETY",
     "md.safety_stock":    "STOCK",
     "md.multi_unit_load": "MUL",
-    # part_requirement_split_1/2/3
     "req.part_no": "ARTNR",
     "req.date":    "PRODDAG",
     "req.qty":     "ARTAN",
-    # splunk_receiving_data
     "splunk.part_no": "Part Number",
     "splunk.date":    "Load Delivery Date Final",
     "splunk.qty":     "Quantity",
-    # goods_to_be_received
     "gtr.part_no": "ARTNR",
     "gtr.date":    "ANK_TID_SENAST",
     "gtr.qty":     "ARTAN",
 }
 
-# Human-readable metadata for the Column Mapping UI.
-# Each entry: (group_label, logical_key, field_label)
 COLUMN_MAPPING_META = [
     ("Inventory Report",     "inv.part_no",    "Part Number column"),
     ("Inventory Report",     "inv.beginning",  "Beginning Inventory Today"),
@@ -63,14 +53,8 @@ class AdjustmentStore:
     INVENTORY_OVERRIDES_FILE = SHAREDNETWORKPATH / "inventory_overrides.json"
     DELIVERY_ADJUSTMENTS_FILE = SHAREDNETWORKPATH / "delivery_adjustments.json"
 
-    # ------------------------------------------------------------------ #
-    #  Column mapping                                                       #
-    # ------------------------------------------------------------------ #
-
     @staticmethod
     def load_column_mapping() -> dict:
-        """Return {logical_key: col_name}.  Keys absent from the saved file fall
-        back to COLUMN_MAPPING_DEFAULTS so the engine always has a value."""
         f = AdjustmentStore.COLUMN_MAPPING_FILE
         if f.exists():
             try:
@@ -92,10 +76,6 @@ class AdjustmentStore:
                 json.dump(mapping, fp, indent=2)
         except Exception as e:
             print(f"AdjustmentStore: error saving column mapping: {e}")
-
-    # ------------------------------------------------------------------ #
-    #  Inventory overrides                                                  #
-    # ------------------------------------------------------------------ #
 
     @staticmethod
     def load_inventory_overrides() -> list:
@@ -122,7 +102,6 @@ class AdjustmentStore:
     def add_inventory_override(part_no: str, adjusted_value: float,
                                 reason: str, username: str) -> dict:
         records = AdjustmentStore.load_inventory_overrides()
-        # Deactivate any existing active override for this part
         for r in records:
             if r['part_no'].upper() == part_no.upper().strip() and r['active']:
                 r['active'] = False
@@ -146,10 +125,6 @@ class AdjustmentStore:
             if r['id'] == record_id:
                 r['active'] = False
         AdjustmentStore.save_inventory_overrides(records)
-
-    # ------------------------------------------------------------------ #
-    #  Delivery adjustments                                                 #
-    # ------------------------------------------------------------------ #
 
     @staticmethod
     def load_delivery_adjustments() -> list:
@@ -180,8 +155,8 @@ class AdjustmentStore:
         records = AdjustmentStore.load_delivery_adjustments()
         record = {
             'id': str(uuid.uuid4()),
-            'type': adj_type,            # 'edit' | 'add'
-            'source': source,            # 'splunk' | 'goods_to_be_received'
+            'type': adj_type,         
+            'source': source,         
             'part_no': part_no.upper().strip(),
             'date': date,
             'original_qty': original_qty,

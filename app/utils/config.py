@@ -3,12 +3,9 @@ import json
 import sys
 from pathlib import Path
 
-# Support both normal Python execution and PyInstaller frozen bundles
 if getattr(sys, 'frozen', False):
-    # Running as a PyInstaller bundle - use the executable's directory
     BASEDIR = Path(sys.executable).resolve().parent
 else:
-    # Running as normal Python - go up from app/utils/config.py to project root
     BASEDIR = Path(__file__).resolve().parent.parent.parent
 
 CONFIGPATH = BASEDIR / "config"
