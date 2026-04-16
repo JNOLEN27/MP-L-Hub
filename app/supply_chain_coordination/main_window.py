@@ -1908,7 +1908,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 return
  
             partcol = list(self.currentcoveragedf.columns).index('Part Number')
-            part_item self.coveragetable.item(item.row(), partcol)
+            part_item = self.coveragetable.item(item.row(), partcol)
             if not part_item:
                 return
             partno = part_item.text().strip()
