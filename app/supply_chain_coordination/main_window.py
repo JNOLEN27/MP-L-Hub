@@ -853,6 +853,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
         fv = self._frozen_view
         if fv.model() is not ct.model():
             fv.setModel(ct.model())
+            # Sync vertical scroll between the two views
+            ct.verticalScrollBar().valueChanged.connect(fv.verticalScrollBar().setValue)
+            fv.verticalScrollBar().valueChanged.connect(ct.verticalScrollBar().setValue)
+            # Sync row heights whenever the main table resizes a row
+            ct.verticalHeader().sectionResized.connect(
+                lambda idx, _old, new: fv.verticalHeader().resizeSection(idx, new)
+            )
         ncols = ct.columnCount()
         if n == 0 or ncols == 0:
             fv.hide()
@@ -861,6 +868,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._frozen_col_count = n
         for c in range(ncols):
             fv.setColumnHidden(c, c >= n)
+        # Push current row heights into the frozen view on every call
+        for r in range(ct.rowCount()):
+            fv.verticalHeader().resizeSection(r, ct.rowHeight(r))
         self._update_frozen_geometry()
         fv.show()
         fv.raise_()
