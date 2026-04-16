@@ -2198,7 +2198,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                         if not m:
                             return None
                         try:
-                            diff = (datetime.strptime(m.group(1), '%Y-%m-%d').date() - today + timedelta(days=1)).days
+                            diff = (datetime.strptime(m.group(1), '%Y-%m-%d').date() - today).days
                             return f'Day {diff}' if 1 <= diff <= 4 else None
                         except ValueError:
                             return None
