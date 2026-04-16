@@ -61,9 +61,10 @@ AVAILABLEAPPS = {
 ADMINUSERS = ["jnolen", "ahuntington", "jmccaslin", "mkaindl", "kwhite", "tgarbachevskaya", "esanta", "sscimemi", "mberry"]
 
 POWERUSERS = {
-    "ljohnson": ["master_data", "current_inventory_report", "part_requirements_split_1", "part_requirements_split_2", "part_requirements_split_3", "splunk_receiving", "goods_to_be_received", "alert_report", "manual_ttt", "goods_to_be_departed"],
-    "cwilliams": ["master_data", "current_inventory_report", "part_requirements_split_1", "part_requirements_split_2", "part_requirements_split_3", "splunk_receiving", "goods_to_be_received", "alert_report", "manual_ttt", "goods_to_be_departed"],
-    "bmcarn": ["master_data", "current_inventory_report", "part_requirements_split_1", "part_requirements_split_2", "part_requirements_split_3", "splunk_receiving", "goods_to_be_received", "alert_report", "manual_ttt", "goods_to_be_departed"]
+    "ljohnson": ["master_data", "current_inventory_report", "part_requirement_split_1", "part_requirement_split_2", "part_requirement_split_3", "splunk_receiving_data", "goods_to_be_received", "alert_report", "manual_TTT", "goods_to_be_departed"],
+    "cwilliams": ["master_data", "current_inventory_report", "part_requirement_split_1", "part_requirement_split_2", "part_requirement_split_3", "splunk_receiving_data", "goods_to_be_received", "alert_report", "manual_TTT", "goods_to_be_departed"],
+    "bmcarn": ["master_data", "current_inventory_report", "part_requirement_split_1", "part_requirement_split_2", "part_requirement_split_3", "splunk_receiving_data", "goods_to_be_received", "alert_report", "manual_TTT", "goods_to_be_departed"],
+    "dezell": ["master_data", "current_inventory_report", "part_requirement_split_1", "part_requirement_split_2", "part_requirement_split_3", "splunk_receiving_data", "goods_to_be_received", "alert_report", "manual_TTT", "goods_to_be_departed"]
     }
 
 WINDOWTITLE = "VCCH Material Planning and Logistics Management Hub"

@@ -19,7 +19,7 @@ class NumericSortTableWidgetItem(QTableWidgetItem):
 
     def __lt__(self, other):
         if isinstance(other, NumericSortTableWidgetItem):
-            return self.sort_value < other.sort_value
+            return self.sort_value < getattr(other, "sort_value", 0)
         return super().__lt__(other)
  
 class SupplyChainCoordinationWindow(QMainWindow):
@@ -640,7 +640,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             if len(filtereddf) > max_display_rows:
                 filtereddf = filtereddf.head(max_display_rows)
 
-            self.currentlydisplayeddf = filtereddf.copy()
+            self.currentcoveragedf = filtereddf.copy()
  
             self.displaycoveragetable(filtereddf)
  
@@ -776,8 +776,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
             colname = headeritem.text()
             action = QAction(colname, self)
             action.setCheckable(True)
-            action.setChecked(col not in self._hidden_coverage_columns)
-            action.toggled.connect(lambda checked, name=colname: self.setcoveragecolumnvisibility(name, checked))
+            action.setChecked(colname not in self._hidden_coverage_columns)
+            action.toggled.connect(lambda checked, name=colname: self.setcoveragecolumnvisible(name, checked))
             menu.addAction(action)
         
         menu.exec_(self._coverage_column_menu.mapToGlobal(self._coverage_column_menu.rect().bottomLeft()))
@@ -793,9 +793,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self._frozen_view.setColumnHidden(colindex, not visible)
 
         if visible:
-            self._hidden_coverage_columns.discard(colindex)
+            self._hidden_coverage_columns.discard(columnname)
         else:
-            self._hidden_coverage_columns.add(colindex)
+            self._hidden_coverage_columns.add(columnname)
         
         self._update_frozen_geometry()
 
@@ -872,7 +872,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         fv.setGeometry(vhw + fw, fw, frozen_width, ct.viewport().height() + hh)
 
     def eventFilter(self, obj, event):
-        if obj is self._frozen_view: and event.type() == QEvent.Wheel:
+        if obj is self._frozen_view and event.type() == QEvent.Wheel:
             QApplication.sendEvent(self.coveragetable.viewport(), event)
             return True
         if obj is self.coveragetable and event.type() == QEvent.Resize:
@@ -1612,6 +1612,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 return
  
             coveragedf = self.coverageengine.buildcoverageanalysis(datadict, daysforward=40)
+
+            comments = self.coverageengine.loadcoveragecomments()
+            if 'Comments' in coveragedf.columns:
+                coveragedf['Comments'] = coveragedf['Part Number'].map(comments).fillna('')
  
             if coveragedf.empty:
                 QMessageBox.information(self, "No Data", "No parts with consumption found.")
@@ -1903,7 +1907,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
             if col != commentscol:
                 return
  
-            partno = str(self.currentcoveragedf.iloc[item.row()]['Part Number'])
+            partcol = list(self.currentcoveragedf.columns).index('Part Number')
+            part_item self.coveragetable.item(item.row(), partcol)
+            if not part_item:
+                return
+            partno = part_item.text().strip()
             commenttext = item.text().strip()
  
             if self._comments_cache is None:
