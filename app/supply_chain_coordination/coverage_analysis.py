@@ -164,7 +164,9 @@ class CoverageAnalysisEngine:
  
     def addcoveragecomments(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
         comments = self.loadcoveragecomments()
-        coveragedf['Comments'] = coveragedf['PART_NO'].astype(str).map(comments).fillna('')
+        # Normalize to remove trailing .0 that pandas adds when reading numeric part numbers
+        partno_str = coveragedf['PART_NO'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+        coveragedf['Comments'] = partno_str.map(comments).fillna('')
         return coveragedf
  
     def adddaysuntilzerocolumn(self, coveragedf: pd.DataFrame) -> pd.DataFrame:

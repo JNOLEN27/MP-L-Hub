@@ -1632,11 +1632,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 return
  
             coveragedf = self.coverageengine.buildcoverageanalysis(datadict, daysforward=40)
+            # buildcoverageanalysis already calls addcoveragecomments internally;
+            # no second mapping needed here
 
-            comments = self.coverageengine.loadcoveragecomments()
-            if 'Comments' in coveragedf.columns:
-                coveragedf['Comments'] = coveragedf['Part Number'].map(comments).fillna('')
- 
             if coveragedf.empty:
                 QMessageBox.information(self, "No Data", "No parts with consumption found.")
                 return
@@ -1931,7 +1929,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
             part_item = self.coveragetable.item(item.row(), partcol)
             if not part_item:
                 return
-            partno = part_item.text().strip()
+            # Normalize: strip trailing .0 so keys match regardless of whether
+            # pandas read the part number as float (12345.0) or string (12345)
+            partno = re.sub(r'\.0$', '', part_item.text().strip())
             commenttext = item.text().strip()
  
             if self._comments_cache is None:
@@ -1947,7 +1947,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
             # Keep originalcoveragedf in sync so comments survive filtering
             if hasattr(self, 'originalcoveragedf') and 'Comments' in self.originalcoveragedf.columns:
-                mask = self.originalcoveragedf['Part Number'].astype(str) == partno
+                mask = self.originalcoveragedf['Part Number'].astype(str).str.replace(r'\.0$', '', regex=True) == partno
                 self.originalcoveragedf.loc[mask, 'Comments'] = commenttext
 
         except Exception as e:
