@@ -1,14 +1,14 @@
 import re
 
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout, QSizePolicy
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
 
 from app.auth.permissions import PermissionsManager
 from app.launcher.access_request_dialog import AccessRequestDialog
 from app.utils.config import (
     WINDOWTITLE, LAUNCHERWINDOWSIZE, AVAILABLEAPPS, COLORPRIMARY, COLORSUCCESS,
-    ADMINUSERS, POWERUSERS
+    ADMINUSERS, POWERUSERS, APP_VERSION
 )
 
 class WrappedButton(QPushButton):
@@ -62,6 +62,8 @@ class LauncherWindow(QMainWindow):
         self.setWindowTitle(WINDOWTITLE)
         self.resize(*LAUNCHERWINDOWSIZE)
         self.setupui()
+        # Check for updates 1 second after the window appears
+        QTimer.singleShot(1000, self._checkforupdate)
         
     def setupui(self):
         centralwidget = QWidget()
@@ -143,27 +145,37 @@ class LauncherWindow(QMainWindow):
         widget.setLayout(layout)
         return widget
     
+    def _checkforupdate(self):
+        from app.utils.updater import checkforupdate
+        if checkforupdate(self):
+            self.close()
+
     def createfooter(self):
         widget = QWidget()
         layout = QHBoxLayout()
-        
+
         requestbtn = QPushButton("Request Access to Apps")
         requestbtn.clicked.connect(self.requestaccess)
         requestbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #a2d8f0; color: grey;}""")
         layout.addWidget(requestbtn)
-        
+
         refreshbtn = QPushButton("Refresh Applications")
         refreshbtn.clicked.connect(self.refreshui)
         refreshbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #a2d8f0; color: grey;}""")
         layout.addWidget(refreshbtn)
-        
+
         username = self.userdata['username']
         if username in ADMINUSERS:
             adminbtn = QPushButton("Admin Panel")
             adminbtn.clicked.connect(self.openadminpanel)
             adminbtn.setStyleSheet("""QPushButton {background-color: #800000; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #ffb3b3; color: grey;}""")
             layout.addWidget(adminbtn)
- 
+
+            updatebtn = QPushButton("Check for Updates")
+            updatebtn.setStyleSheet("""QPushButton {background-color: #800000; color: white; padding: 8px 15px;} QPushButton:hover {background-color: #ffb3b3; color: grey;}""")
+            updatebtn.clicked.connect(self._manualcheckforupdate)
+            layout.addWidget(updatebtn)
+
         if username in ADMINUSERS or username in POWERUSERS:
             dataimportbtn = QPushButton("Data Imports")
             dataimportbtn.clicked.connect(self.opendataimportpanel)
@@ -171,14 +183,25 @@ class LauncherWindow(QMainWindow):
             layout.addWidget(dataimportbtn)
 
         layout.addStretch()
-        
+
+        versionlabel = QLabel(f"v{APP_VERSION}")
+        versionlabel.setStyleSheet("color: #888; font-size: 10px; padding-right: 8px;")
+        layout.addWidget(versionlabel)
+
         exitbtn = QPushButton("Exit")
         exitbtn.clicked.connect(self.close)
         exitbtn.setStyleSheet("""QPushButton {background-color: #d0d0d0; color: black; padding: 8px 15px;} QPushButton:hover {background-color: #800000; color: white}""")
         layout.addWidget(exitbtn)
-        
+
         widget.setLayout(layout)
         return widget
+
+    def _manualcheckforupdate(self):
+        from app.utils.updater import manualcheck
+        manualcheck(self)
+        # If user accepted the update, close
+        from app.utils.updater import checkforupdate as _c
+        # manualcheck handles closing internally via parent.close()
     
     def refreshui(self):
         if self.centralWidget():
