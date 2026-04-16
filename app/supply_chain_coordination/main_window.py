@@ -12,6 +12,16 @@ from app.supply_chain_coordination.coverage_analysis import CoverageAnalysisEngi
 from app.supply_chain_coordination.waterfall_analysis import WaterfallAnalysisEngine
 from app.supply_chain_coordination.ldjis_coverage import LDJISCoverageEngine
  
+class PersistentMenu(QMenu):
+    """QMenu that stays open when checkable actions are toggled."""
+    def mouseReleaseEvent(self, event):
+        action = self.activeAction()
+        if action and action.isCheckable():
+            action.trigger()
+            return
+        super().mouseReleaseEvent(event)
+
+
 class NumericSortTableWidgetItem(QTableWidgetItem):
     def __init__(self, text, sort_value):
         super().__init__(text)
@@ -760,7 +770,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if self.coveragetable.columnCount() == 0:
             return
         
-        menu = QMenu()
+        menu = PersistentMenu(self)
 
         showallaction = QAction("Show All Columns", self)
         showallaction.triggered.connect(self.showallcoveragecolumns)
@@ -1924,7 +1934,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
             self.coverageengine.savecoveragecomments(self._comments_cache)
             self.coveragetable.resizeRowToContents(item.row())
- 
+
+            # Keep originalcoveragedf in sync so comments survive filtering
+            if hasattr(self, 'originalcoveragedf') and 'Comments' in self.originalcoveragedf.columns:
+                mask = self.originalcoveragedf['Part Number'].astype(str) == partno
+                self.originalcoveragedf.loc[mask, 'Comments'] = commenttext
+
         except Exception as e:
             print(f"Error saving comment: {e}")
 
@@ -1985,6 +2000,16 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
             self._savealertsdata(self._alerts_cache)
             self.alertstable.resizeRowToContents(item.row())
+
+            # Keep originalalertsdf in sync so edits survive filtering
+            if hasattr(self, 'originalalertsdf') and col_name in self.originalalertsdf.columns:
+                if 'Part' in self.originalalertsdf.columns and 'Alerts' in self.originalalertsdf.columns:
+                    mask = (
+                        (self.originalalertsdf['Part'].astype(str) == part_item.text()) &
+                        (self.originalalertsdf['Alerts'].astype(str) == alert_item.text())
+                    )
+                    self.originalalertsdf.loc[mask, col_name] = item.text().strip()
+
         except Exception as e:
             print(f"Error saving alert change: {e}")
 
