@@ -44,7 +44,7 @@ if not exist "%UPDATES_DIR%" mkdir "%UPDATES_DIR%"
 
 REM -- Copy build --
 echo Copying build files...
-robocopy "dist\MPL_Hub" "%UPDATES_DIR%\MPL_Hub" /E /IS /IT /COPYALL /R:3 /W:2
+robocopy "dist\MPL_Hub" "%UPDATES_DIR%\MPL_Hub" /E /IS /IT /COPY:DAT /R:3 /W:2
 if errorlevel 8 (
     echo ERROR: robocopy failed. Check network connection and permissions.
     pause

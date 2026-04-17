@@ -130,7 +130,7 @@ def _applyupdate(parent=None) -> bool:
             "@echo off",
             "echo MP^&L Hub is updating, please wait...",
             "timeout /t 4 /nobreak > nul",
-            f'robocopy "{source_dir}" "{app_dir}" /E /IS /IT /COPYALL /R:5 /W:3 > nul',
+            f'robocopy "{source_dir}" "{app_dir}" /E /IS /IT /COPY:DAT /R:5 /W:3 > nul',
             "if errorlevel 8 (",
             "    echo Update failed. Please copy the new version manually from:",
             f'    echo {source_dir}',
