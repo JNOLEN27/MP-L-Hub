@@ -5,10 +5,11 @@ from pathlib import Path
 
 if getattr(sys, 'frozen', False):
     BASEDIR = Path(sys.executable).resolve().parent
+    _version_file = Path(sys._MEIPASS) / "version.txt"
 else:
     BASEDIR = Path(__file__).resolve().parent.parent.parent
+    _version_file = BASEDIR / "version.txt"
 
-_version_file = BASEDIR / "version.txt"
 APP_VERSION = _version_file.read_text().strip() if _version_file.exists() else "0.0.0"
 
 CONFIGPATH = BASEDIR / "config"
