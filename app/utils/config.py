@@ -8,6 +8,9 @@ if getattr(sys, 'frozen', False):
 else:
     BASEDIR = Path(__file__).resolve().parent.parent.parent
 
+_version_file = BASEDIR / "version.txt"
+APP_VERSION = _version_file.read_text().strip() if _version_file.exists() else "0.0.0"
+
 CONFIGPATH = BASEDIR / "config"
 
 LOCALAPPDATA = Path(os.getenv('LOCALAPPDATA', str(Path.home() / 'AppData' / 'Local'))) / "MP&LHUB"

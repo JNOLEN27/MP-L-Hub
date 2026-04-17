@@ -23,6 +23,8 @@ a = Analysis(
     datas=[
         # Include the entire app/ package
         ('app', 'app'),
+        # Include version file so the app knows its own version at runtime
+        ('version.txt', '.'),
         *matplotlib_datas,
         *mpl_datas,
     ],
@@ -54,6 +56,7 @@ a = Analysis(
         'app',
         'app.utils',
         'app.utils.config',
+        'app.utils.updater',
         'app.data',
         'app.data.import_manager',
         'app.auth',
