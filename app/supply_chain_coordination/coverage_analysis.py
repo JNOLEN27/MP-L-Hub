@@ -164,6 +164,9 @@ class CoverageAnalysisEngine:
  
     def addcoveragecomments(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
         comments = self.loadcoveragecomments()
+        if 'PART_NO' not in coveragedf.columns:
+            coveragedf['Comments'] = ''
+            return coveragedf
         # Normalize to remove trailing .0 that pandas adds when reading numeric part numbers
         partno_str = coveragedf['PART_NO'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
         coveragedf['Comments'] = partno_str.map(comments).fillna('')

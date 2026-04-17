@@ -146,7 +146,7 @@ def _applyupdate(parent=None) -> bool:
 
         subprocess.Popen(
             ["cmd.exe", "/c", str(bat_path)],
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP,
             close_fds=True,
         )
         return True

@@ -1977,7 +1977,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
     def _onalertchanged(self, item):
         try:
-            cols = [self.alertstable.horizontalHeaderItem(c).text()
+            cols = [self.alertstable.horizontalHeaderItem(c).text() if self.alertstable.horizontalHeaderItem(c) else ''
                     for c in range(self.alertstable.columnCount())]
             if item.column() >= len(cols):
                 return
@@ -2047,7 +2047,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
     def _onpiwdchanged(self, item):
         try:
-            cols = [self.piwdtable.horizontalHeaderItem(c).text()
+            cols = [self.piwdtable.horizontalHeaderItem(c).text() if self.piwdtable.horizontalHeaderItem(c) else ''
                     for c in range(self.piwdtable.columnCount())]
             if item.column() >= len(cols):
                 return
