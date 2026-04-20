@@ -2210,6 +2210,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
                 if 'PART' in alertdf.columns and not alertdf.empty:
                     alertdf = alertdf.drop_duplicates(subset=['PART', 'ALERT_DETAILS'], keep='first')
+                    # Keep only the earliest alert day per part
+                    alertdf['_day_num'] = alertdf['ALERT_DETAILS'].str.extract(r'Day (\d+)', expand=False).astype(float)
+                    alertdf = alertdf.sort_values('_day_num').drop_duplicates(subset=['PART'], keep='first').drop(columns=['_day_num'])
             else:
                 alertdf = shortage_df
 
