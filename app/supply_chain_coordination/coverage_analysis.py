@@ -878,7 +878,7 @@ class CoverageAnalysisEngine:
  
     def exporttocsv(self, coveragedf: pd.DataFrame, filename: str) -> bool:
         try:
-            coveragedf.to_csv(filename, index=False)
+            coveragedf.to_csv(filename, sep=";", index=False)
             return True
         except Exception as e:
             print(f"Export error: {e}")
