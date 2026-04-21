@@ -2,7 +2,7 @@ import json
 import re
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog, QTableView, QSpinBox, QMenu, QAction)
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog, QTableView, QMenu, QAction)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QEvent
 from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, timedelta
@@ -125,14 +125,14 @@ class SupplyChainCoordinationWindow(QMainWindow):
         calloffforecasttab = self.createcalloffforecasttab()
         ldjiscoveragetab = self.createldjiscoveragetab()
         alertstab = self.createalertstab()
-        piwdtab = self.createpiwdtab()
- 
+        # piwdtab = self.createpiwdtab()  # PIWD Report hidden until needed
+
         tabs.addTab(coveragedashtab, "Coverage Dashboard")
         tabs.addTab(coverageindivtab, "Individual Part Coverage")
         tabs.addTab(calloffforecasttab, "Call-off Forecast and Waterfall")
         tabs.addTab(ldjiscoveragetab, "LDJIS Coverage")
         tabs.addTab(alertstab, "Alerts Breakdown")
-        tabs.addTab(piwdtab, "PIWD Report")
+        # tabs.addTab(piwdtab, "PIWD Report")  # hidden until needed
 
         from app.utils.config import ADMINUSERS, POWERUSERS
         username = self.userdata.get('username', '')
@@ -723,17 +723,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         resetsortbtn.clicked.connect(self.resetcoveragetablesort)
         buttonlayout.addWidget(resetsortbtn)
 
-        freezelabel = QLabel("Freeze:")
-        freezelabel.setContentsMargins(8, 0, 2, 0)
-        buttonlayout.addWidget(freezelabel)
-        self._freeze_spinbox = QSpinBox()
-        self._freeze_spinbox.setRange(0, 10)
-        self._freeze_spinbox.setValue(0)
-        self._freeze_spinbox.setSuffix(" col(s)")
-        self._freeze_spinbox.setFixedWidth(90)
-        self._freeze_spinbox.setToolTip("Number of columns to freeze on the left while scrolling")
-        self._freeze_spinbox.valueChanged.connect(self._setfrozencolumns)
-        buttonlayout.addWidget(self._freeze_spinbox)
+        freezebtn = QPushButton("Freeze Columns")
+        freezebtn.clicked.connect(self.showfreezecolumnmenu)
+        buttonlayout.addWidget(freezebtn)
+        self._freeze_cols_btn = freezebtn
 
         buttonlayout.addStretch()
         layout.addLayout(buttonlayout)
@@ -741,7 +734,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.filtersection = self.createfiltersection()
         layout.addWidget(self.filtersection)
 
-        self._frozen_col_count = 0
+        self._frozen_cols = set()
         self.coveragetable = QTableWidget()
         self.coveragetable.setWordWrap(True)
         self.coveragetable.setSortingEnabled(True)
@@ -791,6 +784,40 @@ class SupplyChainCoordinationWindow(QMainWindow):
             menu.addAction(action)
         
         menu.exec_(self._coverage_column_menu.mapToGlobal(self._coverage_column_menu.rect().bottomLeft()))
+
+    def showfreezecolumnmenu(self):
+        if self.coveragetable.columnCount() == 0:
+            return
+        menu = PersistentMenu(self)
+
+        clearaction = QAction("Unfreeze All", self)
+        clearaction.triggered.connect(self._clearfrozencolumns)
+        menu.addAction(clearaction)
+        menu.addSeparator()
+
+        for col in range(self.coveragetable.columnCount()):
+            header = self.coveragetable.horizontalHeaderItem(col)
+            if not header or self.coveragetable.isColumnHidden(col):
+                continue
+            name = header.text()
+            action = QAction(name, self)
+            action.setCheckable(True)
+            action.setChecked(name in self._frozen_cols)
+            action.toggled.connect(lambda checked, n=name: self._togglefreezecolumn(n, checked))
+            menu.addAction(action)
+
+        menu.exec_(self._freeze_cols_btn.mapToGlobal(self._freeze_cols_btn.rect().bottomLeft()))
+
+    def _togglefreezecolumn(self, colname, freeze):
+        if freeze:
+            self._frozen_cols.add(colname)
+        else:
+            self._frozen_cols.discard(colname)
+        self._applyfrozencolumns()
+
+    def _clearfrozencolumns(self):
+        self._frozen_cols.clear()
+        self._frozen_view.hide()
 
     def setcoveragecolumnvisible(self, columnname, visible):
         colindex = self._getcoveragecolumnindex(columnname)
@@ -847,28 +874,27 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
         self._update_frozen_geometry()
 
-    def _setfrozencolumns(self, n):
-        self._frozen_col_count = n
+    def _applyfrozencolumns(self):
         ct = self.coveragetable
         fv = self._frozen_view
         if fv.model() is not ct.model():
             fv.setModel(ct.model())
-            # Sync vertical scroll between the two views
             ct.verticalScrollBar().valueChanged.connect(fv.verticalScrollBar().setValue)
             fv.verticalScrollBar().valueChanged.connect(ct.verticalScrollBar().setValue)
-            # Sync row heights whenever the main table resizes a row
             ct.verticalHeader().sectionResized.connect(
                 lambda idx, _old, new: fv.verticalHeader().resizeSection(idx, new)
             )
         ncols = ct.columnCount()
-        if n == 0 or ncols == 0:
+        if not self._frozen_cols or ncols == 0:
             fv.hide()
             return
-        n = min(n, ncols - 1)
-        self._frozen_col_count = n
         for c in range(ncols):
-            fv.setColumnHidden(c, c >= n)
-        # Push current row heights into the frozen view on every call
+            header = ct.horizontalHeaderItem(c)
+            name = header.text() if header else ''
+            frozen = name in self._frozen_cols and not ct.isColumnHidden(c)
+            fv.setColumnHidden(c, not frozen)
+            if frozen:
+                fv.setColumnWidth(c, ct.columnWidth(c))
         for r in range(ct.rowCount()):
             fv.verticalHeader().resizeSection(r, ct.rowHeight(r))
         self._update_frozen_geometry()
@@ -876,19 +902,24 @@ class SupplyChainCoordinationWindow(QMainWindow):
         fv.raise_()
 
     def _update_frozen_geometry(self):
-        n = self._frozen_col_count
         ct = self.coveragetable
         fv = self._frozen_view
-        if n == 0 or ct.columnCount() == 0:
+        if not self._frozen_cols or ct.columnCount() == 0:
             return
-        n = min(n, ct.columnCount())
-        for c in range(n):
-            fv.setColumnWidth(c, ct.columnWidth(c))
+        frozen_width = 0
+        for c in range(ct.columnCount()):
+            header = ct.horizontalHeaderItem(c)
+            name = header.text() if header else ''
+            if name in self._frozen_cols and not ct.isColumnHidden(c):
+                fv.setColumnWidth(c, ct.columnWidth(c))
+                frozen_width += ct.columnWidth(c)
+        if frozen_width == 0:
+            fv.hide()
+            return
         vhw = ct.verticalHeader().width()
         fw = ct.frameWidth()
         hh = ct.horizontalHeader().height()
         fv.horizontalHeader().setFixedHeight(hh)
-        frozen_width = sum(ct.columnWidth(c) for c in range(n))
         fv.setGeometry(vhw + fw, fw, frozen_width, ct.viewport().height() + hh)
 
     def eventFilter(self, obj, event):
@@ -1912,7 +1943,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                             self.coveragetable.resizeRowToContents(row)
             self.coveragetable.setSortingEnabled(True)
             self.coveragetable.itemChanged.connect(self.oncommentchanged)
-            self._setfrozencolumns(self._frozen_col_count)
+            self._applyfrozencolumns()
             self._reapplycoveragehiddencolumns()
  
     def oncommentchanged(self, item):
