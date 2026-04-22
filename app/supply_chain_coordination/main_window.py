@@ -133,6 +133,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
         tabs.addTab(ldjiscoveragetab, "LDJIS Coverage")
         tabs.addTab(alertstab, "Alerts Breakdown")
         # tabs.addTab(piwdtab, "PIWD Report")  # hidden until needed
+        mainttab = MaintenanceTab(self.import_manager, self.userdata)
+        tabs.addTab(maintab, "Maintenance")
 
         from app.utils.config import ADMINUSERS, POWERUSERS
         username = self.userdata.get('username', '')
