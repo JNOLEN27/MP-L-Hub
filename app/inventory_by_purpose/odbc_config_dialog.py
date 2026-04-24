@@ -1,13 +1,7 @@
 import pandas as pd
-from PyQt5.QtWidgets import (
-    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QLineEdit, QTextEdit, QCheckBox,
-    QTableWidget, QTableWidgetItem, QMessageBox, QSplitter, QFrame,
-    QScrollArea, QApplication
-)
+from PyQt5.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QListWidget, QListWidgetItem, QLineEdit, QTextEdit, QCheckBox, QTableWidget, QTableWidgetItem, QMessageBox, QSplitter, QFrame, QScrollArea, QApplication)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
-
 
 class _TestWorker(QThread):
     finished = pyqtSignal(bool, str, object)
@@ -24,7 +18,6 @@ class _TestWorker(QThread):
         )
         self.finished.emit(ok, msg, preview)
 
-
 class ODBCConfigDialog(QDialog):
     def __init__(self, import_manager, parent=None):
         super().__init__(parent)
@@ -35,8 +28,6 @@ class ODBCConfigDialog(QDialog):
         self._test_worker = None
         self._setupui()
         self._loadcategories()
-
-    # ── UI build ──────────────────────────────────────────────────────────────
 
     def _setupui(self):
         root = QVBoxLayout()
@@ -56,8 +47,7 @@ class ODBCConfigDialog(QDialog):
         root.addWidget(subtitle)
 
         splitter = QSplitter(Qt.Horizontal)
-
-        # ── Left: category list ───────────────────────────────────────────────
+ 
         leftpanel = QWidget()
         leftpanel.setFixedWidth(230)
         leftlayout = QVBoxLayout()
@@ -79,7 +69,6 @@ class ODBCConfigDialog(QDialog):
         leftpanel.setLayout(leftlayout)
         splitter.addWidget(leftpanel)
 
-        # ── Right: connection form ────────────────────────────────────────────
         rightscroll = QScrollArea()
         rightscroll.setWidgetResizable(True)
         rightscroll.setFrameShape(QFrame.NoFrame)
@@ -88,8 +77,7 @@ class ODBCConfigDialog(QDialog):
         self.formlayout = QVBoxLayout()
         self.formlayout.setContentsMargins(10, 0, 0, 0)
         self.formlayout.setSpacing(10)
-
-        # Category name header
+        
         self.categorytitle = QLabel("Select a category")
         self.categorytitle.setFont(QFont("Arial", 13, QFont.Bold))
         self.formlayout.addWidget(self.categorytitle)
@@ -98,7 +86,6 @@ class ODBCConfigDialog(QDialog):
         self.categorydesc.setStyleSheet("color: #666; font-size: 10px;")
         self.formlayout.addWidget(self.categorydesc)
 
-        # Enable checkbox
         self.enablecheck = QCheckBox("Enable ODBC for this category")
         self.enablecheck.setFont(QFont("Arial", 10))
         self.enablecheck.toggled.connect(self._onformchanged)
@@ -109,7 +96,6 @@ class ODBCConfigDialog(QDialog):
         sep.setStyleSheet("color: #ddd;")
         self.formlayout.addWidget(sep)
 
-        # Connection string
         connlabel = QLabel("Connection String")
         connlabel.setFont(QFont("Arial", 10, QFont.Bold))
         self.formlayout.addWidget(connlabel)
@@ -137,7 +123,6 @@ class ODBCConfigDialog(QDialog):
         self.connstringinput.textChanged.connect(self._onformchanged)
         self.formlayout.addWidget(self.connstringinput)
 
-        # SQL Query
         querylabel = QLabel("SQL Query")
         querylabel.setFont(QFont("Arial", 10, QFont.Bold))
         self.formlayout.addWidget(querylabel)
@@ -161,7 +146,6 @@ class ODBCConfigDialog(QDialog):
         self.queryinput.textChanged.connect(self._onformchanged)
         self.formlayout.addWidget(self.queryinput)
 
-        # Required columns hint
         self.reqcolslabel = QLabel("")
         self.reqcolslabel.setStyleSheet(
             "color: #444; font-size: 9px; font-family: Consolas, monospace; "
@@ -170,7 +154,6 @@ class ODBCConfigDialog(QDialog):
         self.reqcolslabel.setWordWrap(True)
         self.formlayout.addWidget(self.reqcolslabel)
 
-        # Test button + status
         testrow = QHBoxLayout()
         self.testbtn = QPushButton("Test Connection")
         self.testbtn.setFixedWidth(150)
@@ -189,7 +172,6 @@ class ODBCConfigDialog(QDialog):
         testrow.addWidget(self.teststatuslabel, 1)
         self.formlayout.addLayout(testrow)
 
-        # Preview table
         self.previewtable = QTableWidget()
         self.previewtable.setEditTriggers(QTableWidget.NoEditTriggers)
         self.previewtable.setFixedHeight(130)
@@ -208,7 +190,6 @@ class ODBCConfigDialog(QDialog):
 
         root.addWidget(splitter)
 
-        # ── Bottom buttons ────────────────────────────────────────────────────
         btnsep = QFrame()
         btnsep.setFrameShape(QFrame.HLine)
         btnsep.setStyleSheet("color: #ddd;")
@@ -251,8 +232,6 @@ class ODBCConfigDialog(QDialog):
         root.addLayout(btnrow)
         self.setLayout(root)
         self._setformenabled(False)
-
-    # ── Population ────────────────────────────────────────────────────────────
 
     def _loadcategories(self):
         self.categorylist.blockSignals(True)
@@ -299,8 +278,6 @@ class ODBCConfigDialog(QDialog):
         self.previewtable.setVisible(False)
         self.savebtn.setEnabled(False)
         self._setformenabled(True)
-
-    # ── Slots ─────────────────────────────────────────────────────────────────
 
     def _oncategorychanged(self, row):
         if row < 0:
