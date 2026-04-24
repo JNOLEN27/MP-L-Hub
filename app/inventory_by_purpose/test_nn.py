@@ -1,16 +1,8 @@
-"""
-Real-data validation test for InventorybyPurposeNeuralNetwork.
-Run from the repo root:  python test_nn.py
-Uses the live imported files via DataImportManager (80/20 train-test split).
-"""
 import pandas as pd
 import numpy as np
 from ibp_neural_network import InventorybyPurposeNeuralNetwork
 from import_manager import DataImportManager
 
-# ---------------------------------------------------------------------------
-# 1. Run the pipeline
-# ---------------------------------------------------------------------------
 print("=" * 60)
 print("IBP Neural Network — real data validation")
 print("=" * 60)
@@ -35,9 +27,6 @@ print(f"  Test RMSE     : {metrics['testrmse']:.4f}")
 print(f"  Test MAE      : {metrics['testmae']:.4f}")
 print(f"  Final train loss: {metrics['trainlosses'][-1]:.6f}")
 
-# ---------------------------------------------------------------------------
-# 2. Print test-split results (real part numbers vs model predictions)
-# ---------------------------------------------------------------------------
 testrows = nn.lastpredictions[nn.lastpredictions['Split'] == 'test'].copy()
 testrows = testrows.sort_values('AbsError', ascending=False)
 
