@@ -45,10 +45,6 @@ COLUMN_MAPPING_META = [
 
 
 class AdjustmentStore:
-    """Persistence layer for column mappings, inventory overrides, and delivery
-    adjustments.  All three files live on the shared network path so every user
-    picks up the same overrides on their next Generate Coverage run."""
-
     COLUMN_MAPPING_FILE      = SHAREDNETWORKPATH / "column_mapping.json"
     INVENTORY_OVERRIDES_FILE = SHAREDNETWORKPATH / "inventory_overrides.json"
     DELIVERY_ADJUSTMENTS_FILE = SHAREDNETWORKPATH / "delivery_adjustments.json"
@@ -148,10 +144,7 @@ class AdjustmentStore:
             print(f"AdjustmentStore: error saving delivery adjustments: {e}")
 
     @staticmethod
-    def add_delivery_adjustment(adj_type: str, source: str, part_no: str,
-                                 date: str, adjusted_qty: float,
-                                 reason: str, username: str,
-                                 original_qty=None) -> dict:
+    def add_delivery_adjustment(adj_type: str, source: str, part_no: str, date: str, adjusted_qty: float, reason: str, username: str, original_qty=None) -> dict:
         records = AdjustmentStore.load_delivery_adjustments()
         record = {
             'id': str(uuid.uuid4()),
