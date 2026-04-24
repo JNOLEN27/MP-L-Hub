@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple, Optional
 partcol      = "PART"
 countrycol   = "SUPP_SHP_COUNTRY"
 sscol        = "STOCK"
-sdcol        = "SAFETY"   # target: safety stock
+sdcol        = "SAFETY" 
 
 reqpartcol = "ARTNR"
 reqdatecol = "PRODDAG"
@@ -23,7 +23,6 @@ numericfeatures = [
     "MULT_UNIT_LOAD_VALID",
     "SHIP_QTY",
     "STOCK",
-    # "SAFETY" removed — it is the target, including it here causes data leakage
     "FIXED_PERIOD",
     "TTT_DAYS",
     "avgdailyusage",
@@ -57,7 +56,7 @@ class InventorybyPurposeNeuralNetwork:
     def __init__(self, import_manager):
         self.import_manager = import_manager
         self.scaler = StandardScaler()
-        self.labelencoders: Dict[str, LabelEncoder] = {}  # fix 1: : not =
+        self.labelencoders: Dict[str, LabelEncoder] = {} 
         self.model: Optional[SafetyStockModel] = None
         self.featurecolumns: List[str] = []
         self.lastpredictions: Optional[pd.DataFrame] = None
@@ -115,7 +114,7 @@ class InventorybyPurposeNeuralNetwork:
             'APAC': (today + pd.Timedelta(days=63),  today + pd.Timedelta(days=97)),
         }
 
-        combined = pd.concat(reqsplits, ignore_index=True)  # fix 3: ignore_index
+        combined = pd.concat(reqsplits, ignore_index=True) 
         combined[reqdatecol] = pd.to_datetime(combined[reqdatecol], errors='coerce')
         combined[reqqtycol]  = pd.to_numeric(combined[reqqtycol],  errors='coerce').fillna(0)
 
@@ -125,7 +124,7 @@ class InventorybyPurposeNeuralNetwork:
         results = []
         for part in masterdata[partcol]:
             region = regionlookup.get(part, 'No Country Found')
-            window = regionwindows.get(region)  # fix 2: regionwindows not regionlookup
+            window = regionwindows.get(region)  
 
             if window is None:
                 results.append(0.0)
@@ -148,7 +147,7 @@ class InventorybyPurposeNeuralNetwork:
             reqsplits  = [data['req_split_1'], data['req_split_2'], data['req_split_3']]
             masterdata['Region']       = masterdata[countrycol].apply(self.determineregion)
             masterdata['avgdailyusage'] = self.calculatedailyusage(masterdata, reqsplits)
-            masterdata = masterdata.dropna(subset=[sdcol])  # fix 8: target is sdcol (SAFETY)
+            masterdata = masterdata.dropna(subset=[sdcol])  
 
             if masterdata.empty:
                 return False, f"No rows with a valid {sdcol} value.", None, None
@@ -157,7 +156,7 @@ class InventorybyPurposeNeuralNetwork:
                 if col in masterdata.columns:
                     le = LabelEncoder()
                     masterdata[col] = le.fit_transform(masterdata[col].astype(str))
-                    self.labelencoders[col] = le  # fix 4: le not len
+                    self.labelencoders[col] = le 
 
             allfeatures = numericfeatures + categoricalfeatures
             missing = [f for f in allfeatures if f not in masterdata.columns]
@@ -168,7 +167,7 @@ class InventorybyPurposeNeuralNetwork:
             self.featurecolumns = allfeatures
 
             x = masterdata[allfeatures].apply(pd.to_numeric, errors='coerce').fillna(0).values.astype(np.float32)
-            y = pd.to_numeric(masterdata[sdcol], errors='coerce').fillna(0).values.astype(np.float32)  # fix 8
+            y = pd.to_numeric(masterdata[sdcol], errors='coerce').fillna(0).values.astype(np.float32) 
             partids = masterdata[partcol].values if partcol in masterdata.columns else np.arange(len(x))
 
             return True, f"Features prepared: {x.shape[0]} samples, {x.shape[1]} features.", x, y, partids
@@ -197,7 +196,7 @@ class InventorybyPurposeNeuralNetwork:
         xtestt  = torch.tensor(xtest,  dtype=torch.float32)
         ytestt  = torch.tensor(ytest,  dtype=torch.float32)
 
-        loader    = DataLoader(TensorDataset(xtraint, ytraint), batch_size=batchsize, shuffle=True)  # fix 7: batch_size
+        loader    = DataLoader(TensorDataset(xtraint, ytraint), batch_size=batchsize, shuffle=True) 
         criterion = nn.MSELoss()
 
         self.buildmodel(xtrain.shape[1], hiddensizes, dropout)
