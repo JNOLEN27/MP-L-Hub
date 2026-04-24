@@ -1,6 +1,3 @@
-"""
-Minimal test version to diagnose initialization crash
-"""
 import logging
 from pathlib import Path
 from PyQt5.QtWidgets import (
@@ -9,7 +6,6 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt
 
-# Setup logging
 LOG_FILE = Path.home() / "InventoryByPurpose_Error.log"
 logging.basicConfig(
     filename=LOG_FILE,
@@ -41,7 +37,6 @@ class InventorybyPurposeWindow(QMainWindow):
             raise
 
     def setupui(self):
-        """Setup minimal UI"""
         try:
             logger.info("Starting setupui...")
             centralwidget = QWidget()
@@ -49,13 +44,11 @@ class InventorybyPurposeWindow(QMainWindow):
 
             layout = QVBoxLayout()
 
-            # Header
             title = QLabel("Inventory by Purpose [MINIMAL TEST]")
             title.setFont(QFont("Arial", 18, QFont.Bold))
             title.setAlignment(Qt.AlignCenter)
             layout.addWidget(title)
 
-            # Create empty tabs (no filters, no tables, no canvas)
             logger.info("Creating tab widget...")
             tabs = QTabWidget()
 
