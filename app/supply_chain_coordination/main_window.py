@@ -13,14 +13,12 @@ from app.supply_chain_coordination.waterfall_analysis import WaterfallAnalysisEn
 from app.supply_chain_coordination.ldjis_coverage import LDJISCoverageEngine
  
 class PersistentMenu(QMenu):
-    """QMenu that stays open when checkable actions are toggled."""
     def mouseReleaseEvent(self, event):
         action = self.activeAction()
         if action and action.isCheckable():
             action.trigger()
             return
         super().mouseReleaseEvent(event)
-
 
 class NumericSortTableWidgetItem(QTableWidgetItem):
     def __init__(self, text, sort_value):
@@ -125,14 +123,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
         calloffforecasttab = self.createcalloffforecasttab()
         ldjiscoveragetab = self.createldjiscoveragetab()
         alertstab = self.createalertstab()
-        # piwdtab = self.createpiwdtab()  # PIWD Report hidden until needed
 
         tabs.addTab(coveragedashtab, "Coverage Dashboard")
         tabs.addTab(coverageindivtab, "Individual Part Coverage")
         tabs.addTab(calloffforecasttab, "Call-off Forecast and Waterfall")
         tabs.addTab(ldjiscoveragetab, "LDJIS Coverage")
         tabs.addTab(alertstab, "Alerts Breakdown")
-        # tabs.addTab(piwdtab, "PIWD Report")  # hidden until needed
 
         from app.supply_chain_coordination.maintenance_tab import MaintenanceTab
         mainttab = MaintenanceTab(self.import_manager, self.userdata)
@@ -162,7 +158,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self._reapply_filter_heights()
 
     def _on_screen_changed(self, new_screen):
-        """Called by Qt when the window is moved to a different monitor."""
         self._recalc_filter_heights(new_screen)
         self._reapply_filter_heights()
 
@@ -674,8 +669,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.displaycoveragetable(self.currentcoveragedf)
 
     def _clearpartlistfilter(self, refilter=True):
-        """Clear the part list paste filter.  Pass refilter=False when called
-        from clearfilters (which redisplays the table itself)."""
         if hasattr(self, '_partlist_timer'):
             self._partlist_timer.stop()
         if hasattr(self, '_partlist_textedit'):
@@ -1660,8 +1653,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 return
  
             coveragedf = self.coverageengine.buildcoverageanalysis(datadict, daysforward=40)
-            # buildcoverageanalysis already calls addcoveragecomments internally;
-            # no second mapping needed here
 
             if coveragedf.empty:
                 QMessageBox.information(self, "No Data", "No parts with consumption found.")
@@ -1957,8 +1948,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             part_item = self.coveragetable.item(item.row(), partcol)
             if not part_item:
                 return
-            # Normalize: strip trailing .0 so keys match regardless of whether
-            # pandas read the part number as float (12345.0) or string (12345)
             partno = re.sub(r'\.0$', '', part_item.text().strip())
             commenttext = item.text().strip()
  
@@ -1972,8 +1961,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
             self.coverageengine.savecoveragecomments(self._comments_cache)
             self.coveragetable.resizeRowToContents(item.row())
-
-            # Keep originalcoveragedf in sync so comments survive filtering
+         
             if hasattr(self, 'originalcoveragedf') and 'Comments' in self.originalcoveragedf.columns:
                 mask = self.originalcoveragedf['Part Number'].astype(str).str.replace(r'\.0$', '', regex=True) == partno
                 self.originalcoveragedf.loc[mask, 'Comments'] = commenttext
@@ -2038,8 +2026,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
             self._savealertsdata(self._alerts_cache)
             self.alertstable.resizeRowToContents(item.row())
-
-            # Keep originalalertsdf in sync so edits survive filtering
+         
             if hasattr(self, 'originalalertsdf') and col_name in self.originalalertsdf.columns:
                 if 'Part' in self.originalalertsdf.columns and 'Alerts' in self.originalalertsdf.columns:
                     mask = (
@@ -2238,7 +2225,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
                 if 'PART' in alertdf.columns and not alertdf.empty:
                     alertdf = alertdf.drop_duplicates(subset=['PART', 'ALERT_DETAILS'], keep='first')
-                    # Keep only the earliest alert day per part
                     alertdf['_day_num'] = alertdf['ALERT_DETAILS'].str.extract(r'Day (\d+)', expand=False).astype(float)
                     alertdf = alertdf.sort_values('_day_num').drop_duplicates(subset=['PART'], keep='first').drop(columns=['_day_num'])
             else:
