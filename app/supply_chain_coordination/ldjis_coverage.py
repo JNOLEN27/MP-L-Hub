@@ -3,7 +3,6 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 
-
 class LDJISCoverageEngine:
     N_FIXED = 6
     FIXED_COLS = [
