@@ -30,7 +30,6 @@ def _normalize_df(df: pd.DataFrame, data_key: str, mapping: dict) -> pd.DataFram
 
     return df.rename(columns=rename_dict) if rename_dict else df
 
-
 def _apply_delivery_adjustments(df: pd.DataFrame, source: str) -> pd.DataFrame:
     from app.supply_chain_coordination.adjustment_store import AdjustmentStore, COLUMN_MAPPING_DEFAULTS
     adjustments = [
@@ -78,7 +77,6 @@ def _apply_delivery_adjustments(df: pd.DataFrame, source: str) -> pd.DataFrame:
         df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
 
     return df
-
 
 class CoverageAnalysisEngine:
     def __init__(self, import_manager):
@@ -167,7 +165,6 @@ class CoverageAnalysisEngine:
         if 'PART_NO' not in coveragedf.columns:
             coveragedf['Comments'] = ''
             return coveragedf
-        # Normalize to remove trailing .0 that pandas adds when reading numeric part numbers
         partno_str = coveragedf['PART_NO'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
         coveragedf['Comments'] = partno_str.map(comments).fillna('')
         return coveragedf
