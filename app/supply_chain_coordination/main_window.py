@@ -1656,7 +1656,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 QMessageBox.warning(self, "Missing Data", message)
                 return
  
-            coveragedf = self.coverageengine.buildcoverageanalysis(datadict, daysforward=40)
+            coveragedf = self.coverageengine.buildcoverageanalysis(datadict, target_consumption_days=30)
 
             if coveragedf.empty:
                 QMessageBox.information(self, "No Data", "No parts with consumption found.")

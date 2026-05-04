@@ -246,7 +246,7 @@ class CoverageAnalysisEngine:
  
         return coveragedf[finalorder]
  
-    def buildcoverageanalysis(self, datadict: Dict[str, pd.DataFrame], daysforward: int = 40) -> pd.DataFrame:
+    def buildcoverageanalysis(self, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 30) -> pd.DataFrame:
         uniqueparts = self.getpartswithconsumption(
             datadict['req_split_1'],
             datadict['req_split_2'],
@@ -260,7 +260,7 @@ class CoverageAnalysisEngine:
         coveragedf = self.addregioncolumn(coveragedf)
         coveragedf = self.addprogramsupported(coveragedf)
         coveragedf = self.addcoveragecomments(coveragedf)
-        coveragedf = self.adddailyprojections(coveragedf, datadict, daysforward)
+        coveragedf = self.adddailyprojections(coveragedf, datadict, target_consumption_days)
         coveragedf = self.adddaysuntilzerocolumn(coveragedf)
         coveragedf = self.renamecolumnstofriendly(coveragedf)
         coveragedf = self.reordercolumns(coveragedf)
@@ -431,21 +431,21 @@ class CoverageAnalysisEngine:
 
         return coveragedf
 
-    def adddailyprojections(self, coveragedf: pd.DataFrame, datadict: Dict[str, pd.DataFrame], daysforward: int) -> pd.DataFrame:
+    def adddailyprojections(self, coveragedf: pd.DataFrame, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 30) -> pd.DataFrame:
         consumptiondata = self.combineconsumptiondata(
             datadict['req_split_1'],
             datadict['req_split_2'],
             datadict['req_split_3']
         )
         receiptdata = self.parsesplunkreceivingdata(datadict.get('splunk_data', pd.DataFrame()))
- 
+
         coveragedf['Initial_Stock'] = pd.to_numeric(coveragedf['Initial_Stock'], errors='coerce').fillna(0)
- 
+
         today = datetime.now().date()
- 
+
         day0_receipts = receiptdata.get(today, pd.Series(dtype=float))
         day0_consumption = consumptiondata.get(today, pd.Series(dtype=float))
- 
+
         def _norm_part(p):
             s = str(p).strip().upper()
             return s[:-2] if s.endswith('.0') else s
@@ -459,16 +459,21 @@ class CoverageAnalysisEngine:
                 return float(row['Initial_Stock']) + receipts - consumption
             except:
                 return float(row['Initial_Stock'])
- 
+
         day0_col = f'Day_000_{today.strftime("%Y_%m_%d")}'
         coveragedf[day0_col] = coveragedf.apply(calc_day0, axis=1)
- 
+
         last_col = day0_col
 
         pending_receipts: Dict = {}
         pending_consumption: Dict = {}
 
-        for dayoffset in range(1, daysforward):
+        days_created = 0
+        dayoffset = 0
+        max_calendar_days = target_consumption_days * 6  # safety cap (never loop forever)
+
+        while days_created < target_consumption_days and dayoffset < max_calendar_days:
+            dayoffset += 1
             date = today + timedelta(days=dayoffset)
 
             daily_receipts = receiptdata.get(date, pd.Series(dtype=float))
@@ -481,7 +486,8 @@ class CoverageAnalysisEngine:
                 for pn, qty in daily_consumption.items():
                     pending_consumption[pn] = pending_consumption.get(pn, 0) + float(qty)
 
-            if date.weekday() >= 5:
+            # Skip days with no consumption across all parts
+            if daily_consumption.empty or daily_consumption.sum() == 0:
                 continue
 
             datestr = date.strftime('%Y_%m_%d')
@@ -513,10 +519,11 @@ class CoverageAnalysisEngine:
 
             pending_receipts = {}
             pending_consumption = {}
- 
+            days_created += 1
+
         if 'Initial_Stock' in coveragedf.columns:
             coveragedf = coveragedf.drop('Initial_Stock', axis=1)
- 
+
         return coveragedf
  
     def analyzeindivpart(self, partnumber: str, datadict: Dict[str, pd.DataFrame]) -> Tuple[Dict, List[Dict]]:
