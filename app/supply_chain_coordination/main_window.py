@@ -2068,28 +2068,28 @@ class SupplyChainCoordinationWindow(QMainWindow):
         cols = [self.alertstable.horizontalHeaderItem(c).text() if self.alertstable.horizontalHeaderItem(c) else ''
                 for c in range(self.alertstable.columnCount())]
         part_idx = cols.index('Part') if 'Part' in cols else -1
-        if part_idx < 0:
+        alerts_col_idx = cols.index('Alerts') if 'Alerts' in cols else -1
+        if part_idx < 0 or alerts_col_idx < 0:
             return
         highlights = self._alert_highlights or set()
-        editable_indices = {i for i, c in enumerate(cols) if c in self._ALERT_EDITABLE_COLS}
         is_admin = self.userdata.get('username', '') in ADMINUSERS
-        alerts_col_idx = cols.index('Alerts') if 'Alerts' in cols else -1
+        try:
+            self.alertstable.itemChanged.disconnect()
+        except Exception:
+            pass
         for row in range(self.alertstable.rowCount()):
             part_item = self.alertstable.item(row, part_idx)
             part = part_item.text() if part_item else ''
-            is_highlighted = part in highlights
-            for col in range(self.alertstable.columnCount()):
-                cell = self.alertstable.item(row, col)
-                if cell is None:
-                    continue
-                if is_highlighted:
-                    cell.setBackground(QColor(255, 235, 59))
-                elif col in editable_indices:
-                    cell.setBackground(QColor(255, 255, 230))
-                elif is_admin and col == alerts_col_idx:
-                    cell.setBackground(QColor(230, 245, 255))
-                else:
-                    cell.setBackground(QColor(255, 255, 255))
+            cell = self.alertstable.item(row, alerts_col_idx)
+            if cell is None:
+                continue
+            if part in highlights:
+                cell.setBackground(QColor(255, 235, 59))
+            elif is_admin:
+                cell.setBackground(QColor(230, 245, 255))
+            else:
+                cell.setBackground(QColor(255, 255, 255))
+        self.alertstable.itemChanged.connect(self._onalertchanged)
 
     def _onalertchanged(self, item):
         try:
@@ -2680,14 +2680,14 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     if col in editable_indices:
                         item.setFlags(item.flags() | Qt.ItemIsEditable)
                         item.setBackground(QColor(255, 255, 230))
-                    elif is_admin and col == alerts_col_idx:
-                        item.setFlags(item.flags() | Qt.ItemIsEditable)
-                        item.setBackground(QColor(230, 245, 255))
+                    elif col == alerts_col_idx:
+                        if is_admin:
+                            item.setFlags(item.flags() | Qt.ItemIsEditable)
+                        else:
+                            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                        item.setBackground(QColor(255, 235, 59) if is_highlighted else QColor(230, 245, 255) if is_admin else QColor(255, 255, 255))
                     else:
                         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-
-                    if is_highlighted:
-                        item.setBackground(QColor(255, 235, 59))
 
                     self.alertstable.setItem(row, col, item)
  
