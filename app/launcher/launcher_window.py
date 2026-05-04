@@ -62,7 +62,6 @@ class LauncherWindow(QMainWindow):
         self.setWindowTitle(WINDOWTITLE)
         self.resize(*LAUNCHERWINDOWSIZE)
         self.setupui()
-        # Check for updates 1 second after the window appears
         QTimer.singleShot(1000, self._checkforupdate)
         
     def setupui(self):
@@ -199,9 +198,7 @@ class LauncherWindow(QMainWindow):
     def _manualcheckforupdate(self):
         from app.utils.updater import manualcheck
         manualcheck(self)
-        # If user accepted the update, close
         from app.utils.updater import checkforupdate as _c
-        # manualcheck handles closing internally via parent.close()
     
     def refreshui(self):
         if self.centralWidget():
@@ -232,7 +229,6 @@ class LauncherWindow(QMainWindow):
         from app.launcher.network_config_dialog import NetworkConfigDialog
         dialog = NetworkConfigDialog(self)
         if dialog.exec_():
-            # Refresh the footer button color to reflect the new state
             if self.centralWidget():
                 self.centralWidget().setParent(None)
             self.setupui()
