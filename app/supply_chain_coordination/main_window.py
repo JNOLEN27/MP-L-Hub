@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLa
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QEvent
 from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, timedelta
-from app.utils.config import APPWINDOWSIZE, getsharednetworkpath
+from app.utils.config import APPWINDOWSIZE, getsharednetworkpath, ADMINUSERS
 from app.data.import_manager import DataImportManager
 from app.supply_chain_coordination.coverage_analysis import CoverageAnalysisEngine
 from app.supply_chain_coordination.waterfall_analysis import WaterfallAnalysisEngine
@@ -44,6 +44,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._comments_cache = None
         self._alerts_cache = None
         self._piwd_cache = None
+        self._alert_highlights = None
         self.setWindowTitle("Supply Chain Coordination Application")
         self._dropdowns = []
         self._hidden_coverage_columns = set()
@@ -1035,6 +1036,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.alertstable.setWordWrap(True)
         self.alertstable.setSortingEnabled(True)
         self.alertstable.setStyleSheet(tablestyle)
+        if self.userdata.get('username', '') in ADMINUSERS:
+            self.alertstable.setContextMenuPolicy(Qt.CustomContextMenu)
+            self.alertstable.customContextMenuRequested.connect(self._onalerts_contextmenu)
         scrollarea.setWidget(self.alertstable)
         layout.addWidget(scrollarea)
  
@@ -2003,6 +2007,90 @@ class SupplyChainCoordinationWindow(QMainWindow):
         except Exception as e:
             print(f"Error saving alerts data: {e}")
 
+    def _alerthighlightsfile(self):
+        return getsharednetworkpath() / "alert_highlights.json"
+
+    def _loadalerthighlights(self) -> set:
+        f = self._alerthighlightsfile()
+        if f.exists():
+            try:
+                with open(f, 'r') as fp:
+                    return set(json.load(fp))
+            except Exception as e:
+                print(f"Error loading alert highlights: {e}")
+        return set()
+
+    def _savealerthighlights(self, highlights: set):
+        f = self._alerthighlightsfile()
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            with open(f, 'w') as fp:
+                json.dump(list(highlights), fp)
+        except Exception as e:
+            print(f"Error saving alert highlights: {e}")
+
+    def _onalerts_contextmenu(self, pos):
+        item = self.alertstable.itemAt(pos)
+        if item is None:
+            return
+        row = item.row()
+        cols = [self.alertstable.horizontalHeaderItem(c).text() if self.alertstable.horizontalHeaderItem(c) else ''
+                for c in range(self.alertstable.columnCount())]
+        part_idx = cols.index('Part') if 'Part' in cols else -1
+        if part_idx < 0:
+            return
+        part_item = self.alertstable.item(row, part_idx)
+        if not part_item:
+            return
+        part = part_item.text()
+        if self._alert_highlights is None:
+            self._alert_highlights = self._loadalerthighlights()
+        menu = QMenu(self)
+        if part in self._alert_highlights:
+            action = menu.addAction("Remove Highlight")
+            action.triggered.connect(lambda: self._togglealertrowhighlight(part, False))
+        else:
+            action = menu.addAction("Highlight Row")
+            action.triggered.connect(lambda: self._togglealertrowhighlight(part, True))
+        menu.exec_(self.alertstable.viewport().mapToGlobal(pos))
+
+    def _togglealertrowhighlight(self, part, highlight):
+        if self._alert_highlights is None:
+            self._alert_highlights = self._loadalerthighlights()
+        if highlight:
+            self._alert_highlights.add(part)
+        else:
+            self._alert_highlights.discard(part)
+        self._savealerthighlights(self._alert_highlights)
+        self._applyalerttablehighlights()
+
+    def _applyalerttablehighlights(self):
+        cols = [self.alertstable.horizontalHeaderItem(c).text() if self.alertstable.horizontalHeaderItem(c) else ''
+                for c in range(self.alertstable.columnCount())]
+        part_idx = cols.index('Part') if 'Part' in cols else -1
+        if part_idx < 0:
+            return
+        highlights = self._alert_highlights or set()
+        editable_indices = {i for i, c in enumerate(cols) if c in self._ALERT_EDITABLE_COLS}
+        is_admin = self.userdata.get('username', '') in ADMINUSERS
+        alerts_col_idx = cols.index('Alerts') if 'Alerts' in cols else -1
+        for row in range(self.alertstable.rowCount()):
+            part_item = self.alertstable.item(row, part_idx)
+            part = part_item.text() if part_item else ''
+            is_highlighted = part in highlights
+            for col in range(self.alertstable.columnCount()):
+                cell = self.alertstable.item(row, col)
+                if cell is None:
+                    continue
+                if is_highlighted:
+                    cell.setBackground(QColor(255, 235, 59))
+                elif col in editable_indices:
+                    cell.setBackground(QColor(255, 255, 230))
+                elif is_admin and col == alerts_col_idx:
+                    cell.setBackground(QColor(230, 245, 255))
+                else:
+                    cell.setBackground(QColor(255, 255, 255))
+
     def _onalertchanged(self, item):
         try:
             cols = [self.alertstable.horizontalHeaderItem(c).text() if self.alertstable.horizontalHeaderItem(c) else ''
@@ -2010,8 +2098,6 @@ class SupplyChainCoordinationWindow(QMainWindow):
             if item.column() >= len(cols):
                 return
             col_name = cols[item.column()]
-            if col_name not in self._ALERT_EDITABLE_COLS:
-                return
 
             part_idx = cols.index('Part') if 'Part' in cols else -1
             alert_idx = cols.index('Alerts') if 'Alerts' in cols else -1
@@ -2021,6 +2107,29 @@ class SupplyChainCoordinationWindow(QMainWindow):
             alert_item = self.alertstable.item(item.row(), alert_idx)
             if not part_item or not alert_item:
                 return
+
+            # Admin editing the Alerts (day) value
+            if col_name == 'Alerts' and self.userdata.get('username', '') in ADMINUSERS:
+                new_alert = item.text().strip()
+                if hasattr(self, 'originalalertsdf') and 'Part' in self.originalalertsdf.columns:
+                    mask = self.originalalertsdf['Part'].astype(str) == part_item.text()
+                    old_rows = self.originalalertsdf[mask]
+                    if not old_rows.empty:
+                        old_alert = str(old_rows.iloc[0]['Alerts'])
+                        if old_alert != new_alert:
+                            old_key = part_item.text() + '|' + old_alert
+                            new_key = part_item.text() + '|' + new_alert
+                            if self._alerts_cache is None:
+                                self._alerts_cache = self._loadalertsdata()
+                            if old_key in self._alerts_cache:
+                                self._alerts_cache[new_key] = self._alerts_cache.pop(old_key)
+                                self._savealertsdata(self._alerts_cache)
+                            self.originalalertsdf.loc[mask, 'Alerts'] = new_alert
+                return
+
+            if col_name not in self._ALERT_EDITABLE_COLS:
+                return
+
             key = part_item.text() + '|' + alert_item.text()
 
             if self._alerts_cache is None:
@@ -2496,19 +2605,29 @@ class SupplyChainCoordinationWindow(QMainWindow):
         cols = alertdf.columns.tolist()
         n_rows, n_cols = len(alertdf), len(cols)
         editable_indices = {i for i, c in enumerate(cols) if c in self._ALERT_EDITABLE_COLS}
+        is_admin = self.userdata.get('username', '') in ADMINUSERS
+        alerts_col_idx = cols.index('Alerts') if 'Alerts' in cols else -1
+        part_col_idx = cols.index('Part') if 'Part' in cols else -1
+
+        if self._alert_highlights is None:
+            self._alert_highlights = self._loadalerthighlights()
+        highlights = self._alert_highlights
 
         self.alertstable.setSortingEnabled(False)
         self.alertstable.setUpdatesEnabled(False)
- 
+
         try:
             self.alertstable.setColumnCount(n_cols)
             self.alertstable.setHorizontalHeaderLabels(cols)
             self.alertstable.setRowCount(n_rows)
- 
+
             data = alertdf.values
             int_col_indices = {i for i, c in enumerate(cols) if c in {'Inv', 'Yard', 'Req'}}
 
             for row in range(n_rows):
+                part_str = str(data[row, part_col_idx]) if part_col_idx >= 0 else ''
+                is_highlighted = part_str in highlights
+
                 for col in range(n_cols):
                     value = data[row, col]
                     if col in int_col_indices and value is not None and not (isinstance(value, float) and value != value):
@@ -2523,8 +2642,14 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     if col in editable_indices:
                         item.setFlags(item.flags() | Qt.ItemIsEditable)
                         item.setBackground(QColor(255, 255, 230))
+                    elif is_admin and col == alerts_col_idx:
+                        item.setFlags(item.flags() | Qt.ItemIsEditable)
+                        item.setBackground(QColor(230, 245, 255))
                     else:
                         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                    if is_highlighted:
+                        item.setBackground(QColor(255, 235, 59))
 
                     self.alertstable.setItem(row, col, item)
  
