@@ -2664,18 +2664,45 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if not hasattr(self, 'originalalertsdf') or self.originalalertsdf.empty:
             QMessageBox.warning(self, "No Data", "Generate alerts breakdown first.")
             return
- 
-        filename, _ = QFileDialog.getSaveFileName(self, "Export Alerts Breakdown", f"Alerts_Breakdown_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", "CSV files (*.csv)")
-        if filename:
-            try:
-                cols = [self.alertstable.horizontalHeaderItem(c).text() for c in range(self.alertstable.columnCount())]
-                rows = []
-                for r in range(self.alertstable.rowCount()):
-                    rows.append([self.alertstable.item(r, c).text() if self.alertstable.item(r, c) else '' for c in range(self.alertstable.columnCount())])
-                pd.DataFrame(rows, columns=cols).to_csv(filename, index=False)
-                QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
-            except Exception as e:
-                QMessageBox.critical(self, "Export Failed", str(e))
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export Alerts Breakdown",
+            f"Alerts_Breakdown_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            "Excel files (*.xlsx);;CSV files (*.csv)"
+        )
+        if not filename:
+            return
+
+        try:
+            cols = [self.alertstable.horizontalHeaderItem(c).text() if self.alertstable.horizontalHeaderItem(c) else f'Col{c}'
+                    for c in range(self.alertstable.columnCount())]
+            rows = []
+            for r in range(self.alertstable.rowCount()):
+                rows.append([self.alertstable.item(r, c).text() if self.alertstable.item(r, c) else ''
+                              for c in range(self.alertstable.columnCount())])
+            df = pd.DataFrame(rows, columns=cols)
+
+            if filename.endswith('.csv'):
+                df.to_csv(filename, index=False)
+            else:
+                if not filename.endswith('.xlsx'):
+                    filename += '.xlsx'
+                part_col_idx = cols.index('Part') if 'Part' in cols else -1
+                highlights = self._alert_highlights or set()
+                with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='Alerts Breakdown')
+                    ws = writer.sheets['Alerts Breakdown']
+                    from openpyxl.styles import PatternFill
+                    yellow_fill = PatternFill(start_color='FFEB3B', end_color='FFEB3B', fill_type='solid')
+                    for row_idx, row_data in enumerate(rows):
+                        part = row_data[part_col_idx] if part_col_idx >= 0 else ''
+                        if part in highlights:
+                            for col_idx in range(len(cols)):
+                                ws.cell(row=row_idx + 2, column=col_idx + 1).fill = yellow_fill
+
+            QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", str(e))
                 
     def displaypiwdtable(self, piwddf: pd.DataFrame):
         if piwddf.empty:
