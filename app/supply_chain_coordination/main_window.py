@@ -2250,22 +2250,60 @@ class SupplyChainCoordinationWindow(QMainWindow):
             asnitem.setFlags(asnitem.flags() & ~Qt.ItemIsEditable)
             self.transactiontable.setItem(row, 4, asnitem)
 
+    def _export_table_to_excel(self, table, filename, sheet_name='Sheet1'):
+        from openpyxl import Workbook
+        from openpyxl.styles import PatternFill, Font
+        wb = Workbook()
+        ws = wb.active
+        ws.title = sheet_name
+        n_cols = table.columnCount()
+        n_rows = table.rowCount()
+        for col in range(n_cols):
+            header = table.horizontalHeaderItem(col)
+            ws.cell(row=1, column=col + 1, value=header.text() if header else '')
+        for row in range(n_rows):
+            for col in range(n_cols):
+                cell_item = table.item(row, col)
+                value = cell_item.text() if cell_item else ''
+                ws_cell = ws.cell(row=row + 2, column=col + 1, value=value)
+                if cell_item:
+                    brush = cell_item.background()
+                    if brush.style() != 0:  # 0 = Qt.NoBrush
+                        c = brush.color()
+                        r, g, b = c.red(), c.green(), c.blue()
+                        if not (r == 255 and g == 255 and b == 255):
+                            hex_color = f'{r:02X}{g:02X}{b:02X}'
+                            ws_cell.fill = PatternFill(start_color=hex_color, end_color=hex_color, fill_type='solid')
+                    fg = cell_item.foreground().color()
+                    fr, fg2, fb = fg.red(), fg.green(), fg.blue()
+                    if not (fr == 0 and fg2 == 0 and fb == 0):
+                        ws_cell.font = Font(color=f'{fr:02X}{fg2:02X}{fb:02X}')
+        wb.save(filename)
+
     def exporttransactiontable(self):
         if not hasattr(self, 'transactiontable') or self.transactiontable.rowCount() == 0:
             QMessageBox.warning(self, "No Data", "Generate transaction breakdown first.")
             return
- 
-        filename, _ = QFileDialog.getSaveFileName(self, "Export Transaction Breakdown", f"Transaction_Breakdown_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", "CSV files (*.csv)")
-        if filename:
-            try:
-                cols = [self.transactiontable.horizontalHeaderItem(c).text() for c in range(self.transactiontable.columnCount())]
-                rows = []
-                for r in range(self.transactiontable.rowCount()):
-                    rows.append([self.transactiontable.item(r, c).text() if self.transactiontable.item(r, c) else '' for c in range(self.transactiontable.columnCount())])
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export Transaction Breakdown",
+            f"Transaction_Breakdown_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            "Excel files (*.xlsx);;CSV files (*.csv)"
+        )
+        if not filename:
+            return
+        try:
+            if filename.endswith('.csv'):
+                cols = [self.transactiontable.horizontalHeaderItem(c).text() if self.transactiontable.horizontalHeaderItem(c) else f'Col{c}' for c in range(self.transactiontable.columnCount())]
+                rows = [[self.transactiontable.item(r, c).text() if self.transactiontable.item(r, c) else '' for c in range(self.transactiontable.columnCount())] for r in range(self.transactiontable.rowCount())]
                 pd.DataFrame(rows, columns=cols).to_csv(filename, index=False)
-                QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
-            except Exception as e:
-                QMessageBox.critical(self, "Export Failed", str(e))
+            else:
+                if not filename.endswith('.xlsx'):
+                    filename += '.xlsx'
+                self._export_table_to_excel(self.transactiontable, filename, 'Transaction Breakdown')
+            QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", str(e))
  
     _ALERT_COL_MAP = {
         'SCC_NAME':            'SCC',
@@ -2650,18 +2688,45 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if not hasattr(self, 'originalalertsdf') or self.originalalertsdf.empty:
             QMessageBox.warning(self, "No Data", "Generate alerts breakdown first.")
             return
- 
-        filename, _ = QFileDialog.getSaveFileName(self, "Export Alerts Breakdown", f"Alerts_Breakdown_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", "CSV files (*.csv)")
-        if filename:
-            try:
-                cols = [self.alertstable.horizontalHeaderItem(c).text() for c in range(self.alertstable.columnCount())]
-                rows = []
-                for r in range(self.alertstable.rowCount()):
-                    rows.append([self.alertstable.item(r, c).text() if self.alertstable.item(r, c) else '' for c in range(self.alertstable.columnCount())])
-                pd.DataFrame(rows, columns=cols).to_csv(filename, index=False)
-                QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
-            except Exception as e:
-                QMessageBox.critical(self, "Export Failed", str(e))
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export Alerts Breakdown",
+            f"Alerts_Breakdown_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            "Excel files (*.xlsx);;CSV files (*.csv)"
+        )
+        if not filename:
+            return
+
+        try:
+            cols = [self.alertstable.horizontalHeaderItem(c).text() if self.alertstable.horizontalHeaderItem(c) else f'Col{c}'
+                    for c in range(self.alertstable.columnCount())]
+            rows = []
+            for r in range(self.alertstable.rowCount()):
+                rows.append([self.alertstable.item(r, c).text() if self.alertstable.item(r, c) else ''
+                              for c in range(self.alertstable.columnCount())])
+            df = pd.DataFrame(rows, columns=cols)
+
+            if filename.endswith('.csv'):
+                df.to_csv(filename, index=False)
+            else:
+                if not filename.endswith('.xlsx'):
+                    filename += '.xlsx'
+                part_col_idx = cols.index('Part') if 'Part' in cols else -1
+                highlights = self._alert_highlights or set()
+                with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='Alerts Breakdown')
+                    ws = writer.sheets['Alerts Breakdown']
+                    from openpyxl.styles import PatternFill
+                    yellow_fill = PatternFill(start_color='FFEB3B', end_color='FFEB3B', fill_type='solid')
+                    for row_idx, row_data in enumerate(rows):
+                        part = row_data[part_col_idx] if part_col_idx >= 0 else ''
+                        if part in highlights:
+                            for col_idx in range(len(cols)):
+                                ws.cell(row=row_idx + 2, column=col_idx + 1).fill = yellow_fill
+
+            QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", str(e))
                 
     def displaypiwdtable(self, piwddf: pd.DataFrame):
         if piwddf.empty:
@@ -2718,18 +2783,26 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if not hasattr(self, 'originalpiwddf') or self.originalpiwddf.empty:
             QMessageBox.warning(self, "No Data", "Generate PIWD report first.")
             return
-        
-        filename, _ = QFileDialog.getSaveFileName(self, "Export PIWD Report", f"PIWD_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", "CSV files (*.csv)")
-        if filename:
-            try:
-                cols = [self.piwdtable.horizontalHeaderItem(c).text() for c in range(self.piwdtable.columnCount())]
-                rows = []
-                for r in range(self.piwdtable.rowCount()):
-                    rows.append([self.piwdtable.item(r, c).text() if self.piwdtable.item(r, c) else '' for c in range(self.piwdtable.columnCount())])
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export PIWD Report",
+            f"PIWD_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            "Excel files (*.xlsx);;CSV files (*.csv)"
+        )
+        if not filename:
+            return
+        try:
+            if filename.endswith('.csv'):
+                cols = [self.piwdtable.horizontalHeaderItem(c).text() if self.piwdtable.horizontalHeaderItem(c) else f'Col{c}' for c in range(self.piwdtable.columnCount())]
+                rows = [[self.piwdtable.item(r, c).text() if self.piwdtable.item(r, c) else '' for c in range(self.piwdtable.columnCount())] for r in range(self.piwdtable.rowCount())]
                 pd.DataFrame(rows, columns=cols).to_csv(filename, index=False)
-                QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
-            except Exception as e:
-                QMessageBox.critical(self, "Export Failed", str(e))
+            else:
+                if not filename.endswith('.xlsx'):
+                    filename += '.xlsx'
+                self._export_table_to_excel(self.piwdtable, filename, 'PIWD Report')
+            QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", str(e))
  
     def refreshcoveragedata(self):
         self.generatecoverageanalysis()
@@ -2738,15 +2811,27 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if not hasattr(self, 'currentcoveragedf') or self.currentcoveragedf.empty:
             QMessageBox.warning(self, "No Data", "Generate analysis first.")
             return
- 
-        filename, _ = QFileDialog.getSaveFileName(self, "Export Coverage Analysis", f"Coverage_Analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", "CSV files (*.csv)")
- 
-        if filename:
-            success = self.coverageengine.exporttocsv(self.currentcoveragedf, filename)
-            if success:
-                QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export Coverage Analysis",
+            f"Coverage_Analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            "Excel files (*.xlsx);;CSV files (*.csv)"
+        )
+        if not filename:
+            return
+        try:
+            if filename.endswith('.csv'):
+                success = self.coverageengine.exporttocsv(self.currentcoveragedf, filename)
+                if not success:
+                    QMessageBox.critical(self, "Export Failed", "Could not export file.")
+                    return
             else:
-                QMessageBox.critical(self, "Export Failed", "Could not export file.")
+                if not filename.endswith('.xlsx'):
+                    filename += '.xlsx'
+                self._export_table_to_excel(self.coveragetable, filename, 'Coverage Analysis')
+            QMessageBox.information(self, "Export Complete", f"Exported to:\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", str(e))
 
     def resetcoveragetablesort(self):
         if not hasattr(self, 'currentcoveragedf') or self.currentcoveragedf.empty:

@@ -52,6 +52,8 @@ a = Analysis(
         'base64',
         'uuid',
         'shutil',
+        'openpyxl',
+        'openpyxl.styles',
         # App modules (explicitly list all submodules)
         'app',
         'app.utils',
