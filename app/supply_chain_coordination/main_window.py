@@ -2,9 +2,9 @@ import json
 import re
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog, QTableView, QMenu, QAction)
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QMessageBox, QScrollArea, QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox, QFrame, QApplication, QLineEdit, QGridLayout, QProgressDialog, QTableView, QMenu, QAction, QStyledItemDelegate)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QEvent
-from PyQt5.QtGui import QFont, QColor
+from PyQt5.QtGui import QFont, QColor, QBrush
 from datetime import datetime, timedelta
 from app.utils.config import APPWINDOWSIZE, getsharednetworkpath, ADMINUSERS
 from app.data.import_manager import DataImportManager
@@ -30,6 +30,15 @@ class NumericSortTableWidgetItem(QTableWidgetItem):
             return self.sort_value < getattr(other, "sort_value", 0)
         return super().__lt__(other)
  
+class _BackgroundDelegate(QStyledItemDelegate):
+    """Forces QTableWidgetItem BackgroundRole to render even when a stylesheet is applied."""
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        brush = index.data(Qt.BackgroundRole)
+        if brush is not None and isinstance(brush, QBrush) and brush.style() != Qt.NoBrush:
+            option.backgroundBrush = brush
+
+
 class SupplyChainCoordinationWindow(QMainWindow):
     def __init__(self, userdata, parent=None):
         super().__init__(parent)
@@ -1029,6 +1038,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.alertstable.setWordWrap(True)
         self.alertstable.setSortingEnabled(True)
         self.alertstable.setStyleSheet(tablestyle)
+        self.alertstable.setItemDelegate(_BackgroundDelegate(self.alertstable))
         if self.userdata.get('username', '') in ADMINUSERS:
             self.alertstable.setContextMenuPolicy(Qt.CustomContextMenu)
             self.alertstable.customContextMenuRequested.connect(self._onalerts_contextmenu)
