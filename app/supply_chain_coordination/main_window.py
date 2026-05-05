@@ -2318,7 +2318,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         }
  
     _ALERT_EDITABLE_COLS = [
-        'Marked',
+        'M',
         'Reason/Cause',
         '#Cars Short',
         'Impact Date',
