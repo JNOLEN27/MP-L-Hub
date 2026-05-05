@@ -1657,6 +1657,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 return
  
             coveragedf = self.coverageengine.buildcoverageanalysis(datadict, target_consumption_days=30)
+            # buildcoverageanalysis already calls addcoveragecomments internally;
+            # no second mapping needed here
 
             if coveragedf.empty:
                 QMessageBox.information(self, "No Data", "No parts with consumption found.")
