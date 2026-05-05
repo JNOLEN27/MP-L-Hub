@@ -2442,9 +2442,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 displaydf['Program Supported'] = ''
 
             preferred_order = [
-                'Marked', 'SCC', 'Alerts', 'Part', 'Part Description', 'Inv', 'Yard', 'Req',
+                'M', 'SCC', 'Alerts', 'Part', 'Part Description', 'Inv', 'Yard', 'Req',
                 'Country', 'Region', 'Program Supported', 'Supplier',
-            ] + [c for c in self._ALERT_EDITABLE_COLS if c != 'Marked']
+            ] + [c for c in self._ALERT_EDITABLE_COLS if c != 'M']
             ordered = [c for c in preferred_order if c in displaydf.columns]
             remaining = [c for c in displaydf.columns if c not in ordered]
             displaydf = displaydf[ordered + remaining]
