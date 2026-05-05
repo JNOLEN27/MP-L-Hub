@@ -2098,29 +2098,17 @@ class SupplyChainCoordinationWindow(QMainWindow):
             if not part_item or not alert_item:
                 return
 
-            # Admin editing the Alerts (day) value
+            # Admin editing the Alerts (day) value — update the df but don't persist
             if col_name == 'Alerts' and self.userdata.get('username', '') in ADMINUSERS:
-                new_alert = item.text().strip()
                 if hasattr(self, 'originalalertsdf') and 'Part' in self.originalalertsdf.columns:
                     mask = self.originalalertsdf['Part'].astype(str) == part_item.text()
-                    old_rows = self.originalalertsdf[mask]
-                    if not old_rows.empty:
-                        old_alert = str(old_rows.iloc[0]['Alerts'])
-                        if old_alert != new_alert:
-                            old_key = part_item.text() + '|' + old_alert
-                            new_key = part_item.text() + '|' + new_alert
-                            if self._alerts_cache is None:
-                                self._alerts_cache = self._loadalertsdata()
-                            if old_key in self._alerts_cache:
-                                self._alerts_cache[new_key] = self._alerts_cache.pop(old_key)
-                                self._savealertsdata(self._alerts_cache)
-                            self.originalalertsdf.loc[mask, 'Alerts'] = new_alert
+                    self.originalalertsdf.loc[mask, 'Alerts'] = item.text().strip()
                 return
 
             if col_name not in self._ALERT_EDITABLE_COLS:
                 return
 
-            key = part_item.text() + '|' + alert_item.text()
+            key = part_item.text()
 
             if self._alerts_cache is None:
                 self._alerts_cache = self._loadalertsdata()
@@ -2324,6 +2312,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         '#Cars Short',
         'Impact Date',
         'ETA',
+        'QTY',
         'TO/Container#/Air Freight/Delivery Time',
         'ASN Y/N',
         'Unloading Shop A/C/LOCD',
@@ -2390,11 +2379,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 displaydf[col] = ''
 
             saved = self._loadalertsdata()
-            if 'Part' in displaydf.columns and 'Alerts' in displaydf.columns:
-                current_keys = {
-                    str(r['Part']) + '|' + str(r['Alerts'])
-                    for _, r in displaydf.iterrows()
-                }
+            if 'Part' in displaydf.columns:
+                current_keys = {str(r['Part']) for _, r in displaydf.iterrows()}
                 if saved:
                     stale = [k for k in saved if k not in current_keys]
                     for k in stale:
@@ -2403,7 +2389,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                         self._alerts_cache = saved
                         self._savealertsdata(saved)
                     for idx, row in displaydf.iterrows():
-                        key = str(row['Part']) + '|' + str(row['Alerts'])
+                        key = str(row['Part'])
                         if key in saved:
                             for col, val in saved[key].items():
                                 if col in displaydf.columns:
