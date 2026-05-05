@@ -2318,6 +2318,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         }
  
     _ALERT_EDITABLE_COLS = [
+        'Marked',
         'Reason/Cause',
         '#Cars Short',
         'Impact Date',
@@ -2441,9 +2442,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 displaydf['Program Supported'] = ''
 
             preferred_order = [
-                'Alerts', 'Part', 'Part Description', 'Inv', 'Yard', 'Req',
-                'Country', 'Region', 'Program Supported', 'Supplier', 'SCC',
-            ] + self._ALERT_EDITABLE_COLS
+                'Marked', 'SCC', 'Alerts', 'Part', 'Part Description', 'Inv', 'Yard', 'Req',
+                'Country', 'Region', 'Program Supported', 'Supplier',
+            ] + [c for c in self._ALERT_EDITABLE_COLS if c != 'Marked']
             ordered = [c for c in preferred_order if c in displaydf.columns]
             remaining = [c for c in displaydf.columns if c not in ordered]
             displaydf = displaydf[ordered + remaining]
