@@ -714,7 +714,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         exportbtn.clicked.connect(self.exportcoveragetable)
         buttonlayout.addWidget(exportbtn)
 
-        columnsbtn = QPushButton("Columns")
+        columnsbtn = QPushButton("Hide Columns")
         columnsbtn.clicked.connect(self.showcoveragecolumnmenu)
         buttonlayout.addWidget(columnsbtn)
         self._coverage_column_menu = columnsbtn
