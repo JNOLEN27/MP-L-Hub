@@ -2118,7 +2118,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             if col_name not in self._ALERT_EDITABLE_COLS:
                 return
 
-            key = part_item.text()
+            key = re.sub(r'\.0$', '', part_item.text().strip())
 
             if self._alerts_cache is None:
                 self._alerts_cache = self._loadalertsdata()
@@ -2390,21 +2390,24 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 displaydf[col] = ''
 
             saved = self._loadalertsdata()
+            self._alerts_cache = saved  # always warm the cache after load
             if 'Part' in displaydf.columns:
-                current_keys = {str(r['Part']) for _, r in displaydf.iterrows()}
-                if saved:
-                    stale = [k for k in saved if k not in current_keys]
-                    for k in stale:
-                        del saved[k]
-                    if stale:
-                        self._alerts_cache = saved
-                        self._savealertsdata(saved)
-                    for idx, row in displaydf.iterrows():
-                        key = str(row['Part'])
-                        if key in saved:
-                            for col, val in saved[key].items():
-                                if col in displaydf.columns:
-                                    displaydf.at[idx, col] = val
+                def _pkey(v):
+                    return re.sub(r'\.0$', '', str(v).strip())
+                current_keys = {_pkey(r['Part']) for _, r in displaydf.iterrows()}
+                # prune keys whose part is no longer in any alert (normalised comparison)
+                stale = [k for k in saved if _pkey(k) not in current_keys]
+                for k in stale:
+                    del saved[k]
+                if stale:
+                    self._savealertsdata(saved)
+                # restore saved values regardless of whether stale keys existed
+                for idx, row in displaydf.iterrows():
+                    key = _pkey(row['Part'])
+                    if key in saved:
+                        for col, val in saved[key].items():
+                            if col in displaydf.columns:
+                                displaydf.at[idx, col] = val
 
             if 'Country' in displaydf.columns:
                 displaydf['Region'] = displaydf['Country'].apply(
