@@ -2683,6 +2683,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.alertstable.setUpdatesEnabled(True)
             self.alertstable.resizeColumnsToContents()
             self.alertstable.resizeRowsToContents()
+            # Hide Region column — kept in data for filtering, not needed visually
+            for c in range(self.alertstable.columnCount()):
+                h = self.alertstable.horizontalHeaderItem(c)
+                if h and h.text() == 'Region':
+                    self.alertstable.setColumnHidden(c, True)
+                    break
             self.alertstable.setSortingEnabled(True)
             self.alertstable.itemChanged.connect(self._onalertchanged)
 
@@ -2700,12 +2706,14 @@ class SupplyChainCoordinationWindow(QMainWindow):
             return
 
         try:
+            visible_cols = [c for c in range(self.alertstable.columnCount())
+                            if not self.alertstable.isColumnHidden(c)]
             cols = [self.alertstable.horizontalHeaderItem(c).text() if self.alertstable.horizontalHeaderItem(c) else f'Col{c}'
-                    for c in range(self.alertstable.columnCount())]
+                    for c in visible_cols]
             rows = []
             for r in range(self.alertstable.rowCount()):
                 rows.append([self.alertstable.item(r, c).text() if self.alertstable.item(r, c) else ''
-                              for c in range(self.alertstable.columnCount())])
+                              for c in visible_cols])
             df = pd.DataFrame(rows, columns=cols)
 
             if filename.endswith('.csv'):
