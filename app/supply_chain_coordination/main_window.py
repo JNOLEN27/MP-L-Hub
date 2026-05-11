@@ -1666,7 +1666,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 QMessageBox.warning(self, "Missing Data", message)
                 return
  
-            coveragedf = self.coverageengine.buildcoverageanalysis(datadict, target_consumption_days=30)
+            coveragedf = self.coverageengine.buildcoverageanalysis(datadict, target_consumption_days=100)
             # buildcoverageanalysis already calls addcoveragecomments internally;
             # no second mapping needed here
 
