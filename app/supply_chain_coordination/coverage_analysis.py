@@ -246,7 +246,7 @@ class CoverageAnalysisEngine:
  
         return coveragedf[finalorder]
  
-    def buildcoverageanalysis(self, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 30) -> pd.DataFrame:
+    def buildcoverageanalysis(self, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 100) -> pd.DataFrame:
         uniqueparts = self.getpartswithconsumption(
             datadict['req_split_1'],
             datadict['req_split_2'],
@@ -431,7 +431,7 @@ class CoverageAnalysisEngine:
 
         return coveragedf
 
-    def adddailyprojections(self, coveragedf: pd.DataFrame, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 30) -> pd.DataFrame:
+    def adddailyprojections(self, coveragedf: pd.DataFrame, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 100) -> pd.DataFrame:
         consumptiondata = self.combineconsumptiondata(
             datadict['req_split_1'],
             datadict['req_split_2'],
