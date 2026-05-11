@@ -823,31 +823,20 @@ class SupplyChainCoordinationWindow(QMainWindow):
         colindex = self._getcoveragecolumnindex(columnname)
         if colindex is None:
             return
-        
         self.coveragetable.setColumnHidden(colindex, not visible)
-
-        if hasattr(self, '_frozen_view') and self._frozen_view.model() is not None:
-            self._frozen_view.setColumnHidden(colindex, not visible)
-
         if visible:
             self._hidden_coverage_columns.discard(columnname)
         else:
             self._hidden_coverage_columns.add(columnname)
-        
-        self._update_frozen_geometry()
+        self._applyfrozencolumns()
 
     def showallcoveragecolumns(self):
         if self.coveragetable.columnCount() == 0:
             return
-        
         self._hidden_coverage_columns.clear()
-
         for col in range(self.coveragetable.columnCount()):
             self.coveragetable.setColumnHidden(col, False)
-            if hasattr(self, '_frozen_view') and self._frozen_view.model() is not None:
-                self._frozen_view.setColumnHidden(col, False)
-        
-        self._update_frozen_geometry()
+        self._applyfrozencolumns()
 
     def _getcoveragecolumnindex(self, columnname):
         for col in range(self.coveragetable.columnCount()):
@@ -859,20 +848,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
     def _reapplycoveragehiddencolumns(self):
         if self.coveragetable.columnCount() == 0:
             return
-        
         for col in range(self.coveragetable.columnCount()):
             item = self.coveragetable.horizontalHeaderItem(col)
             if not item:
                 continue
-            
-            colname = item.text()
-            hidden = colname in self._hidden_coverage_columns
-            self.coveragetable.setColumnHidden(col, hidden)
-
-            if hasattr(self, '_frozen_view') and self._frozen_view.model() is not None:
-                self._frozen_view.setColumnHidden(col, hidden)
-
-        self._update_frozen_geometry()
+            self.coveragetable.setColumnHidden(col, item.text() in self._hidden_coverage_columns)
 
     def _applyfrozencolumns(self):
         ct = self.coveragetable
@@ -1947,8 +1927,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
                             self.coveragetable.resizeRowToContents(row)
             self.coveragetable.setSortingEnabled(True)
             self.coveragetable.itemChanged.connect(self.oncommentchanged)
-            self._applyfrozencolumns()
-            self._reapplycoveragehiddencolumns()
+            self._reapplycoveragehiddencolumns()  # restore user-hidden cols first
+            self._applyfrozencolumns()            # frozen view always wins last
  
     def oncommentchanged(self, item):
         try:
