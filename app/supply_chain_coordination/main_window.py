@@ -710,7 +710,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         refreshbtn.clicked.connect(self.refreshcoveragedata)
         buttonlayout.addWidget(refreshbtn)
 
-        exportbtn = QPushButton("Export to CSV")
+        exportbtn = QPushButton("Export to XLSX")
         exportbtn.clicked.connect(self.exportcoveragetable)
         buttonlayout.addWidget(exportbtn)
 
@@ -1020,7 +1020,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         generatebtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
         btnlayout.addWidget(generatebtn)
  
-        exportbtn = QPushButton("Export to CSV")
+        exportbtn = QPushButton("Export to XLSX")
         exportbtn.clicked.connect(self.exportalertstable)
         btnlayout.addWidget(exportbtn)
  
@@ -1063,7 +1063,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         generatebtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
         btnlayout.addWidget(generatebtn)
         
-        exportbtn = QPushButton("Export to CSV")
+        exportbtn = QPushButton("Export to XLSX")
         exportbtn.clicked.connect(self.exportpiwdreport)
         btnlayout.addWidget(exportbtn)
         
