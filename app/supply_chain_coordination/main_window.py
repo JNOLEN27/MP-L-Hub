@@ -2117,11 +2117,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.alertstable.resizeRowToContents(item.row())
          
             if hasattr(self, 'originalalertsdf') and col_name in self.originalalertsdf.columns:
-                if 'Part' in self.originalalertsdf.columns and 'Alerts' in self.originalalertsdf.columns:
-                    mask = (
-                        (self.originalalertsdf['Part'].astype(str) == part_item.text()) &
-                        (self.originalalertsdf['Alerts'].astype(str) == alert_item.text())
-                    )
+                if 'Part' in self.originalalertsdf.columns:
+                    part_norm = re.sub(r'\.0$', '', part_item.text().strip())
+                    orig_parts = self.originalalertsdf['Part'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                    mask = orig_parts == part_norm
                     self.originalalertsdf.loc[mask, col_name] = item.text().strip()
 
         except Exception as e:
@@ -2551,6 +2550,17 @@ class SupplyChainCoordinationWindow(QMainWindow):
         selected_programs = self.alerts_program_filter.getselecteditems()
         if selected_programs and 'Program Supported' in filtereddf.columns:
             filtereddf = filtereddf[filtereddf['Program Supported'].isin(selected_programs)]
+
+        # Repopulate editable columns from the in-memory cache so any edits
+        # the user made during this session are visible after a filter change,
+        # even if the originalalertsdf sync in _onalertchanged missed a row.
+        if self._alerts_cache and 'Part' in filtereddf.columns:
+            for idx, row in filtereddf.iterrows():
+                key = re.sub(r'\.0$', '', str(row['Part']).strip())
+                if key in self._alerts_cache:
+                    for col, val in self._alerts_cache[key].items():
+                        if col in filtereddf.columns:
+                            filtereddf.at[idx, col] = val
 
         self.displayalertstable(filtereddf)
  
