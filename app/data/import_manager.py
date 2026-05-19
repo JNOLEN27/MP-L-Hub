@@ -54,6 +54,12 @@ class DataImportManager:
                 "requiredcolumns": ['TO Number', 'Load Delivery Date Original TO', 'Load Delivery Date Final', 'Part Number', 'Quantity'],
                 "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
                 "archive": False},
+            "asn_simple_search": {
+                "name": "ASN Simple Search",
+                "description": "Link between TO and ASN information",
+                "requiredcolumns": ["ID", "Parts", "TO"],
+                "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
+                "archive": False},
             "manual_TTT": {
                 "name": "Manual TTT",
                 "description": "Delivery Days per Supplier",
