@@ -91,6 +91,24 @@ class CoverageAnalysisEngine:
                 self.import_manager.loaddata("splunk_receiving_data"),
                 'splunk_receiving_data', col_mapping,
             )
+            asn_raw = self.import_manager.loaddata("asn_simple_search")
+
+            if not asn_raw.empty and "TO" in asn_raw.columns:
+                asn_raw["TO"] = asn_raw["TO"].astype(str).str.strip()
+
+            splunkdf = splunk_raw.copy()
+            if not splunkdf.empty and "TO Number" in splunkdf.columns:
+                splunkdf["TO"] = splunkdf["TO Number"].astype(str).str.strip()
+
+            if not asn_raw.empty and not splunkdf.empty:
+                mergedasn = asn_raw.merge(
+                    splunkdf[["TO", "Load Delivery Date Final"]],
+                    on="TO",
+                    how="left"
+                )
+            else:
+                mergedasn = pd.DataFrame()
+            
             data = {
                 'current_inventory': _normalize_df(
                     self.import_manager.loaddata("current_inventory_report"),
@@ -113,6 +131,7 @@ class CoverageAnalysisEngine:
                     'part_requirement_split', col_mapping,
                 ),
                 'splunk_data': _apply_delivery_adjustments(splunk_raw, 'splunk'),
+                'asn_data': merged_asn
             }
 
             if data['current_inventory'].empty or data['master_data'].empty:
@@ -698,7 +717,7 @@ class CoverageAnalysisEngine:
  
     def buildpartreceipts(self, partnumber, datadict):
         receiptbydate = {}
-        splunkdf = datadict.get('splunk_data', pd.DataFrame())
+        asn_df = datadict.get('asn_data', pd.DataFrame())
  
         if splunkdf.empty or 'Part Number' not in splunkdf.columns:
             return receiptbydate
