@@ -86,29 +86,50 @@ class CoverageAnalysisEngine:
         try:
             from app.supply_chain_coordination.adjustment_store import AdjustmentStore
             col_mapping = AdjustmentStore.load_column_mapping()
-
+    
             splunk_raw = _normalize_df(
                 self.import_manager.loaddata("splunk_receiving_data"),
                 'splunk_receiving_data', col_mapping,
             )
-            asn_raw = self.import_manager.loaddata("asn_simple_search")
-
-            if not asn_raw.empty and "TO" in asn_raw.columns:
-                asn_raw["TO"] = asn_raw["TO"].astype(str).str.strip()
-
-            splunkdf = splunk_raw.copy()
-            if not splunkdf.empty and "TO Number" in splunkdf.columns:
-                splunkdf["TO"] = splunkdf["TO Number"].astype(str).str.strip()
-
-            if not asn_raw.empty and not splunkdf.empty:
-                mergedasn = asn_raw.merge(
-                    splunkdf[["TO", "Load Delivery Date Final"]],
-                    on="TO",
+    
+            asn_df = self.import_manager.loaddata("asn_simple_search")
+    
+            if not asn_df.empty:
+                asn_df["TO"] = asn_df["TO"].astype(str).str.strip()
+                asn_df["Part"] = asn_df["Part"].astype(str).str.strip().str.upper()
+    
+            splunk_df = splunk_raw.copy()
+            if not splunk_df.empty:
+                splunk_df["TO"] = splunk_df["TO Number"].astype(str).str.strip()
+                splunk_df["Part Number"] = splunk_df["Part Number"].astype(str).str.strip().str.upper()
+    
+            if not splunk_df.empty:
+                merged_df = splunk_df.merge(
+                    asn_df[["TO", "Part", "Quantity"]] if not asn_df.empty else pd.DataFrame(),
+                    left_on=["TO", "Part Number"],
+                    right_on=["TO", "Part"],
                     how="left"
                 )
             else:
-                mergedasn = pd.DataFrame()
-            
+                merged_df = pd.DataFrame()
+    
+            qty_col = None
+            for col in ["Quantity", "QTY", "Qty", "QUANTITY"]:
+                if col in splunk_df.columns:
+                    qty_col = col
+                    break
+                    
+            if not merged_df.empty:
+                if qty_col:
+                    merged_df["_final_qty"] = merged_df["Quantity"].where(
+                        merged_df["Quantity"].notna(),
+                        merged_df[qty_col]
+                    )
+                else:
+                    merged_df["_final_qty"] = merged_df["Quantity"].fillna(0)
+    
+            merged_df = _apply_delivery_adjustments(merged_df, 'splunk')
+    
             data = {
                 'current_inventory': _normalize_df(
                     self.import_manager.loaddata("current_inventory_report"),
@@ -130,15 +151,14 @@ class CoverageAnalysisEngine:
                     self.import_manager.loaddata("part_requirement_split_3"),
                     'part_requirement_split', col_mapping,
                 ),
-                'splunk_data': _apply_delivery_adjustments(splunk_raw, 'splunk'),
-                'asn_data': merged_asn
+                'splunk_data': merged_df,
             }
-
+    
             if data['current_inventory'].empty or data['master_data'].empty:
                 return False, "Current Inventory Report and Master Data are required.", data
-
+    
             return True, "Data loaded successfully", data
-
+    
         except Exception as e:
             return False, f"Error loading data: {str(e)}", {}
  
@@ -489,7 +509,7 @@ class CoverageAnalysisEngine:
 
         days_created = 0
         dayoffset = 0
-        max_calendar_days = target_consumption_days * 6  # safety cap (never loop forever)
+        max_calendar_days = target_consumption_days * 6
 
         while days_created < target_consumption_days and dayoffset < max_calendar_days:
             dayoffset += 1
@@ -505,7 +525,6 @@ class CoverageAnalysisEngine:
                 for pn, qty in daily_consumption.items():
                     pending_consumption[pn] = pending_consumption.get(pn, 0) + float(qty)
 
-            # Skip days with no consumption across all parts
             if daily_consumption.empty or daily_consumption.sum() == 0:
                 continue
 
@@ -717,54 +736,57 @@ class CoverageAnalysisEngine:
  
     def buildpartreceipts(self, partnumber, datadict):
         receiptbydate = {}
-        asn_df = datadict.get('asn_data', pd.DataFrame())
- 
-        if splunkdf.empty or 'Part Number' not in splunkdf.columns:
+        splunkdf = datadict.get('splunk_data', pd.DataFrame())
+    
+        if splunkdf.empty or "Part Number" not in splunkdf.columns or "_final_qty" not in splunkdf.columns:
             return receiptbydate
- 
+    
         import re as _re
         target = _re.sub(r'\.0$', '', partnumber.strip()).upper()
-        normalized = splunkdf['Part Number'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).str.upper()
-        partreceipts = splunkdf[normalized == target]
-        if partreceipts.empty:
+    
+        df = splunkdf.copy()
+    
+        df["_part"] = (
+            df["Part Number"]
+            .astype(str)
+            .str.strip()
+            .str.replace(r'\.0$', '', regex=True)
+            .str.upper()
+        )
+    
+        df["_qty"] = pd.to_numeric(df["_final_qty"], errors="coerce").fillna(0)
+    
+        date_col = "Load Delivery Date Final"
+        if date_col not in df.columns:
             return receiptbydate
-
-        date_col = 'Load Delivery Date Final'
-        if date_col not in partreceipts.columns:
-            return receiptbydate
-
-        qty_col = self.findcolumn(splunkdf, [
-            'Quantity', 'QTY', 'Qty', 'QUANTITY', 'ARTAN',
-            'Load Quantity', 'TO Quantity', 'Receipt Qty', 'Receipt QTY',
-            'Pieces', 'Units',
-        ])
-
-        def _shift(d):
-            if not pd.notna(d): return d
+    
+        df["_date"] = pd.to_datetime(df[date_col], errors="coerce").dt.date
+    
+        def shift(d):
+            if not pd.notna(d):
+                return d
             d = d + timedelta(days=1)
-            if d.weekday() == 5: d += timedelta(days=2)
-            elif d.weekday() == 6: d += timedelta(days=1)
+            if d.weekday() == 5:
+                d += timedelta(days=2)
+            elif d.weekday() == 6:
+                d += timedelta(days=1)
             return d
-
-        try:
-            df = partreceipts.copy()
-            df['_date'] = pd.to_datetime(df[date_col], errors='coerce').dt.date.apply(_shift)
-            df['_qty'] = (pd.to_numeric(df[qty_col], errors='coerce').fillna(0) if qty_col else pd.Series(0, index=df.index))
-            df = df[df['_qty'] > 0].dropna(subset=['_date'])
-        except Exception as e:
-            print(f"[buildpartreceipts] Error preparing data: {e}")
-            return receiptbydate
-
+    
+        df["_date"] = df["_date"].apply(shift)
+    
+        df = df[
+            (df["_part"] == target) &
+            (df["_qty"] > 0) &
+            (df["_date"].notna())
+        ]
+    
         for _, row in df.iterrows():
-            try:
-                receiptbydate.setdefault(row['_date'], []).append({
-                    'quantity': int(row['_qty']),
-                    'asn': str(row.get('TO Number', '') or ''),
-                    'po': '',
-                })
-            except Exception as e:
-                print(f"[buildpartreceipts] Skipping row: {e}")
-
+            receiptbydate.setdefault(row["_date"], []).append({
+                "quantity": int(row["_qty"]),
+                "asn": str(row.get("TO", "")),
+                "po": ""
+            })
+    
         return receiptbydate
  
     def findcolumn(self, df, possiblenames):
