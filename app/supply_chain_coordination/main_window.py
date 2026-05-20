@@ -1927,8 +1927,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
                             self.coveragetable.resizeRowToContents(row)
             self.coveragetable.setSortingEnabled(True)
             self.coveragetable.itemChanged.connect(self.oncommentchanged)
-            self._reapplycoveragehiddencolumns()  # restore user-hidden cols first
-            self._applyfrozencolumns()            # frozen view always wins last
+            self._reapplycoveragehiddencolumns() 
+            self._applyfrozencolumns()
  
     def oncommentchanged(self, item):
         try:
