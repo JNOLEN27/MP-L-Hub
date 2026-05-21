@@ -866,11 +866,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
         fv = self._frozen_view
         if fv.model() is not ct.model():
             fv.setModel(ct.model())
-            # commitData fires after the delegate writes to the model, so the item
-            # text is already updated — use this as a reliable save trigger for
-            # edits made directly in the frozen overlay (itemChanged from the main
-            # QTableWidget may not fire for these edits).
-            fv.commitData.connect(self._on_frozen_view_commit)
+            # QAbstractItemDelegate.commitData is the signal (not QAbstractItemView.commitData
+            # which is a slot). QueuedConnection ensures our handler runs after setModelData
+            # has written the new value to the model — direct connection would fire first,
+            # before the item text is updated.
+            fv.itemDelegate().commitData.connect(
+                self._on_frozen_view_commit, Qt.QueuedConnection
+            )
             # Bidirectional column-width sync: main table → frozen view is handled
             # inside _update_frozen_geometry; this reverse leg syncs a drag in the
             # frozen overlay back to the main table, which then re-fires sectionResized
@@ -908,9 +910,17 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
     def _on_frozen_column_resized(self, col, _old_size, new_size):
         ct = self.coveragetable
-        # Only write back if genuinely different to avoid a resize → sync → resize loop
-        if ct.columnWidth(col) != new_size:
-            ct.setColumnWidth(col, new_size)
+        if ct.columnWidth(col) == new_size:
+            return
+        # Block ct's header signals so setColumnWidth doesn't synchronously fire
+        # sectionResized → _update_frozen_geometry → fv.setGeometry() mid-drag.
+        # A mid-drag setGeometry on the frozen view cancels the drag operation.
+        ct.horizontalHeader().blockSignals(True)
+        ct.setColumnWidth(col, new_size)
+        ct.horizontalHeader().blockSignals(False)
+        # Defer geometry update to the next event loop tick — by then the drag
+        # step is complete and resizing the overlay won't interrupt anything.
+        QTimer.singleShot(0, self._update_frozen_geometry)
 
     def _update_frozen_geometry(self):
         ct = self.coveragetable
