@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
+from app.utils.config import LOCALAPPDATA
 
 
 def _normalize_df(df: pd.DataFrame, data_key: str, mapping: dict) -> pd.DataFrame:
@@ -141,24 +142,73 @@ class CoverageAnalysisEngine:
             coveragedf = coveragedf.sort_values(sort_cols).reset_index(drop=True)
         return coveragedf
  
+    def _sharedcommentsfile(self):
+        return self.import_manager.importsdir.parent / "coveragecomments.json"
+
+    def _localcommentsfile(self):
+        return LOCALAPPDATA / "coveragecomments_pending.json"
+
+    def loadpendingcoveragecomments(self) -> Dict[str, str]:
+        lf = self._localcommentsfile()
+        if lf.exists():
+            try:
+                with open(lf, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading local pending comments: {e}")
+        return {}
+
     def loadcoveragecomments(self) -> Dict[str, str]:
-        commentsfile = self.import_manager.importsdir.parent / "coveragecomments.json"
+        # Load shared baseline
+        shared = {}
+        commentsfile = self._sharedcommentsfile()
         if commentsfile.exists():
             try:
                 with open(commentsfile, 'r') as f:
-                    return json.load(f)
+                    shared = json.load(f)
             except Exception as e:
                 print(f"Error loading comments: {e}")
-        return {}
- 
-    def savecoveragecomments(self, comments: Dict[str, str]):
-        commentsfile = self.import_manager.importsdir.parent / "coveragecomments.json"
+        # Overlay local pending (empty string = user deleted)
+        for k, v in self.loadpendingcoveragecomments().items():
+            if v:
+                shared[k] = v
+            else:
+                shared.pop(k, None)
+        return shared
+
+    def savecoveragecomments(self, pending: Dict[str, str]):
+        # Save ONLY the user's pending changes to a local file (not the shared network file)
+        lf = self._localcommentsfile()
         try:
+            lf.parent.mkdir(parents=True, exist_ok=True)
+            with open(lf, 'w') as f:
+                json.dump(pending, f, indent=2)
+        except Exception as e:
+            print(f"Error saving local pending comments: {e}")
+
+    def uploadcoveragecomments(self, pending: Dict[str, str]) -> bool:
+        """Merge pending local comments into the shared file. Returns True on success."""
+        commentsfile = self._sharedcommentsfile()
+        try:
+            shared = {}
+            if commentsfile.exists():
+                with open(commentsfile, 'r') as f:
+                    shared = json.load(f)
+            # Apply pending on top: empty string = delete, non-empty = set
+            for k, v in pending.items():
+                if v:
+                    shared[k] = v
+                else:
+                    shared.pop(k, None)
             commentsfile.parent.mkdir(parents=True, exist_ok=True)
             with open(commentsfile, 'w') as f:
-                json.dump(comments, f, indent=2)
+                json.dump(shared, f, indent=2)
+            # Clear local pending file
+            self._localcommentsfile().write_text('{}')
+            return True
         except Exception as e:
-            print(f"Error saving comments: {e}")
+            print(f"Error uploading comments: {e}")
+            return False
  
     def addcoveragecomments(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
         comments = self.loadcoveragecomments()

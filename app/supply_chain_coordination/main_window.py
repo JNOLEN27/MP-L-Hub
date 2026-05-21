@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLa
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QEvent
 from PyQt5.QtGui import QFont, QColor, QBrush
 from datetime import datetime, timedelta
-from app.utils.config import APPWINDOWSIZE, getsharednetworkpath, ADMINUSERS
+from app.utils.config import APPWINDOWSIZE, getsharednetworkpath, ADMINUSERS, LOCALAPPDATA
 from app.data.import_manager import DataImportManager
 from app.supply_chain_coordination.coverage_analysis import CoverageAnalysisEngine
 from app.supply_chain_coordination.waterfall_analysis import WaterfallAnalysisEngine
@@ -49,7 +49,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.ldjiscoverageengine = LDJISCoverageEngine(self.import_manager)
         self.ldjismodelnames = ['EX90', 'PS3']
         self._comments_cache = None
+        self._coverage_pending = None
         self._alerts_cache = None
+        self._alerts_pending = None
         self._piwd_cache = None
         self._alert_highlights = None
         self.setWindowTitle("Supply Chain Coordination Application")
@@ -728,6 +730,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         buttonlayout.addWidget(freezebtn)
         self._freeze_cols_btn = freezebtn
 
+        uploadcommentsbtn = QPushButton("Upload Comments")
+        uploadcommentsbtn.clicked.connect(self._uploadcoveragecomments)
+        uploadcommentsbtn.setStyleSheet("""QPushButton {background-color: #D17000; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #E8860A;}""")
+        buttonlayout.addWidget(uploadcommentsbtn)
+
         buttonlayout.addStretch()
         layout.addLayout(buttonlayout)
 
@@ -1003,7 +1010,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
         exportbtn = QPushButton("Export to CSV")
         exportbtn.clicked.connect(self.exportalertstable)
         btnlayout.addWidget(exportbtn)
- 
+
+        uploadfieldsbtn = QPushButton("Upload Field Data")
+        uploadfieldsbtn.clicked.connect(self._uploadalertsdata)
+        uploadfieldsbtn.setStyleSheet("""QPushButton {background-color: #D17000; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #E8860A;}""")
+        btnlayout.addWidget(uploadfieldsbtn)
+
         btnlayout.addStretch()
         layout.addLayout(btnlayout)
  
@@ -1949,13 +1961,17 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
             if self._comments_cache is None:
                 self._comments_cache = self.coverageengine.loadcoveragecomments()
- 
+            if self._coverage_pending is None:
+                self._coverage_pending = self.coverageengine.loadpendingcoveragecomments()
+
             if commenttext:
                 self._comments_cache[partno] = commenttext
             else:
                 self._comments_cache.pop(partno, None)
- 
-            self.coverageengine.savecoveragecomments(self._comments_cache)
+
+            # Track as pending (empty string = delete on upload) and save locally only
+            self._coverage_pending[partno] = commenttext
+            self.coverageengine.savecoveragecomments(self._coverage_pending)
             self.coveragetable.resizeRowToContents(item.row())
          
             if hasattr(self, 'originalcoveragedf') and 'Comments' in self.originalcoveragedf.columns:
@@ -1965,27 +1981,102 @@ class SupplyChainCoordinationWindow(QMainWindow):
         except Exception as e:
             print(f"Error saving comment: {e}")
 
+    def _uploadcoveragecomments(self):
+        if self._coverage_pending is None:
+            self._coverage_pending = self.coverageengine.loadpendingcoveragecomments()
+        if not self._coverage_pending:
+            QMessageBox.information(self, "Upload Comments", "No pending comments to upload.")
+            return
+        success = self.coverageengine.uploadcoveragecomments(self._coverage_pending)
+        if success:
+            self._coverage_pending = {}
+            QMessageBox.information(self, "Upload Comments", "Comments uploaded to the shared file successfully.")
+        else:
+            QMessageBox.warning(self, "Upload Failed",
+                "Could not write to the shared file — it may be in use by another user.\n"
+                "Your comments are saved locally. Please try again in a moment.")
+
     def _alertsfile(self):
         return getsharednetworkpath() / "alertsdata.json"
 
+    def _alertslocalfile(self):
+        return LOCALAPPDATA / "alertsdata_pending.json"
+
     def _loadalertsdata(self):
+        # Load shared baseline
+        shared = {}
         f = self._alertsfile()
         if f.exists():
             try:
                 with open(f, 'r') as fp:
-                    return json.load(fp)
+                    shared = json.load(fp)
             except Exception as e:
                 print(f"Error loading alerts data: {e}")
-        return {}
+        # Deep-merge local pending on top (empty string = field was deleted)
+        lf = self._alertslocalfile()
+        if lf.exists():
+            try:
+                with open(lf, 'r') as fp:
+                    local = json.load(fp)
+                for key, fields in local.items():
+                    if key not in shared:
+                        shared[key] = {}
+                    for col, val in fields.items():
+                        if val:
+                            shared[key][col] = val
+                        else:
+                            shared[key].pop(col, None)
+                    if not shared.get(key):
+                        shared.pop(key, None)
+            except Exception as e:
+                print(f"Error loading local pending alerts data: {e}")
+        return shared
 
-    def _savealertsdata(self, data: dict):
+    def _savealertsdata(self, pending: dict):
+        # Save ONLY the user's pending changes to local file, not the shared file
+        lf = self._alertslocalfile()
+        try:
+            lf.parent.mkdir(parents=True, exist_ok=True)
+            with open(lf, 'w') as fp:
+                json.dump(pending, fp, indent=2)
+        except Exception as e:
+            print(f"Error saving local pending alerts data: {e}")
+
+    def _uploadalertsdata(self):
+        if self._alerts_pending is None:
+            self._alerts_pending = {}
+        if not self._alerts_pending:
+            QMessageBox.information(self, "Upload Field Data", "No pending field data to upload.")
+            return
         f = self._alertsfile()
         try:
+            shared = {}
+            if f.exists():
+                with open(f, 'r') as fp:
+                    shared = json.load(fp)
+            # Deep merge: apply only user's changes onto current shared state
+            for key, fields in self._alerts_pending.items():
+                if key not in shared:
+                    shared[key] = {}
+                for col, val in fields.items():
+                    if val:
+                        shared[key][col] = val
+                    else:
+                        shared[key].pop(col, None)
+                if not shared.get(key):
+                    shared.pop(key, None)
             f.parent.mkdir(parents=True, exist_ok=True)
             with open(f, 'w') as fp:
-                json.dump(data, fp, indent=2)
+                json.dump(shared, fp, indent=2)
+            # Clear local pending
+            self._alerts_pending = {}
+            self._alertslocalfile().write_text('{}')
+            QMessageBox.information(self, "Upload Field Data", "Field data uploaded to the shared file successfully.")
         except Exception as e:
-            print(f"Error saving alerts data: {e}")
+            print(f"Error uploading alerts data: {e}")
+            QMessageBox.warning(self, "Upload Failed",
+                "Could not write to the shared file — it may be in use by another user.\n"
+                "Your field data is saved locally. Please try again in a moment.")
 
     def _alerthighlightsfile(self):
         return getsharednetworkpath() / "alert_highlights.json"
@@ -2102,6 +2193,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
             if self._alerts_cache is None:
                 self._alerts_cache = self._loadalertsdata()
+            if self._alerts_pending is None:
+                lf = self._alertslocalfile()
+                self._alerts_pending = json.loads(lf.read_text()) if lf.exists() else {}
 
             if key not in self._alerts_cache:
                 self._alerts_cache[key] = {}
@@ -2113,7 +2207,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 if not self._alerts_cache[key]:
                     del self._alerts_cache[key]
 
-            self._savealertsdata(self._alerts_cache)
+            # Track as pending (empty string = delete on upload) and save locally only
+            if key not in self._alerts_pending:
+                self._alerts_pending[key] = {}
+            self._alerts_pending[key][col_name] = val  # empty string marks deletion
+            self._savealertsdata(self._alerts_pending)
             self.alertstable.resizeRowToContents(item.row())
          
             if hasattr(self, 'originalalertsdf') and col_name in self.originalalertsdf.columns:
