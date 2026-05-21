@@ -93,6 +93,10 @@ class DataImportsWindow(QMainWindow):
              "description": "Goods to be received by part per day for the next 60 days",
              "category": "splunk_receiving_data",
              "filetypes": "Excel files (*.xlsx *.xls *.xlsm);;CSV files (*.csv)"},
+            {"title": "ASN Simple Search",
+             "description": "Providing link between TO and ASN",
+             "category": "asn_simple_search",
+             "filetypes": "Excel files (*.xlsx *.xls *.xlsm);;CSV files (*.csv)"},
             {"title": "Manual TTT",
              "description": "Delivery Days per Supplier",
              "category": "manual_TTT",
@@ -113,7 +117,7 @@ class DataImportsWindow(QMainWindow):
         
         row = 0
         col = 0
-        maxcols = 3
+        maxcols = 4
         
         for buttoninfo in importbuttons:
             btnwidget = self.createimportbutton(buttoninfo)

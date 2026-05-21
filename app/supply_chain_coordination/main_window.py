@@ -712,11 +712,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         refreshbtn.clicked.connect(self.refreshcoveragedata)
         buttonlayout.addWidget(refreshbtn)
 
-        exportbtn = QPushButton("Export to CSV")
+        exportbtn = QPushButton("Export to XLSX")
         exportbtn.clicked.connect(self.exportcoveragetable)
         buttonlayout.addWidget(exportbtn)
 
-        columnsbtn = QPushButton("Columns")
+        columnsbtn = QPushButton("Hide Columns")
         columnsbtn.clicked.connect(self.showcoveragecolumnmenu)
         buttonlayout.addWidget(columnsbtn)
         self._coverage_column_menu = columnsbtn
@@ -1031,7 +1031,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         generatebtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
         btnlayout.addWidget(generatebtn)
  
-        exportbtn = QPushButton("Export to CSV")
+        exportbtn = QPushButton("Export to XLSX")
         exportbtn.clicked.connect(self.exportalertstable)
         btnlayout.addWidget(exportbtn)
 
@@ -1079,7 +1079,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         generatebtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
         btnlayout.addWidget(generatebtn)
         
-        exportbtn = QPushButton("Export to CSV")
+        exportbtn = QPushButton("Export to XLSX")
         exportbtn.clicked.connect(self.exportpiwdreport)
         btnlayout.addWidget(exportbtn)
         
@@ -1682,7 +1682,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 QMessageBox.warning(self, "Missing Data", message)
                 return
  
-            coveragedf = self.coverageengine.buildcoverageanalysis(datadict, target_consumption_days=30)
+            coveragedf = self.coverageengine.buildcoverageanalysis(datadict, target_consumption_days=100)
             # buildcoverageanalysis already calls addcoveragecomments internally;
             # no second mapping needed here
 
@@ -1963,8 +1963,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
                             self.coveragetable.resizeRowToContents(row)
             self.coveragetable.setSortingEnabled(True)
             self.coveragetable.itemChanged.connect(self.oncommentchanged)
-            self._reapplycoveragehiddencolumns()  # restore user-hidden cols first
-            self._applyfrozencolumns()            # frozen view always wins last
+            self._reapplycoveragehiddencolumns() 
+            self._applyfrozencolumns()
  
     def oncommentchanged(self, item):
         try:
@@ -2419,7 +2419,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         }
  
     _ALERT_EDITABLE_COLS = [
-        'Marked',
+        'M',
         'Reason/Cause',
         '#Cars Short',
         'Impact Date',
@@ -2546,9 +2546,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 displaydf['Program Supported'] = ''
 
             preferred_order = [
-                'Marked', 'SCC', 'Alerts', 'Part', 'Part Description', 'Inv', 'Yard', 'Req',
+                'M', 'SCC', 'Alerts', 'Part', 'Part Description', 'Inv', 'Yard', 'Req',
                 'Country', 'Region', 'Program Supported', 'Supplier',
-            ] + [c for c in self._ALERT_EDITABLE_COLS if c != 'Marked']
+            ] + [c for c in self._ALERT_EDITABLE_COLS if c != 'M']
             ordered = [c for c in preferred_order if c in displaydf.columns]
             remaining = [c for c in displaydf.columns if c not in ordered]
             displaydf = displaydf[ordered + remaining]

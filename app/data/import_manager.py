@@ -54,6 +54,12 @@ class DataImportManager:
                 "requiredcolumns": ['TO Number', 'Load Delivery Date Original TO', 'Load Delivery Date Final', 'Part Number', 'Quantity'],
                 "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
                 "archive": False},
+            "asn_simple_search": {
+                "name": "ASN Simple Search",
+                "description": "Link between TO and ASN information",
+                "requiredcolumns": ["ID", "Parts", "TO"],
+                "filetypes": [".csv", ".xlsx", ".xls", ".xlsm"],
+                "archive": False},
             "manual_TTT": {
                 "name": "Manual TTT",
                 "description": "Delivery Days per Supplier",
@@ -231,14 +237,26 @@ class DataImportManager:
         
         try:
             if filepath.suffix.lower() == '.csv':
+                df = none
                 for encoding in ['utf-8', 'windows-1252', 'iso-8859-1', 'cp1252']:
                     try:
-                        return pd.read_csv(filepath, delimiter=";", encoding=encoding)
+                        df = pd.read_csv(filepath, delimiter=";", encoding=encoding)
+                        break
                     except UnicodeDecodeError:
                         continue
-                return pd.read_csv(filepath, delimiter=";", encoding='utf-8', errors='replace')
+                if df is None:
+                    df = pd.read_csv(filepath, delimiter=";", encoding='utf-8', errors='replace')
             else:
-                return pd.read_excel(filepath)
+                df = pd.read_excel(filepath)
+
+            if category == "asn_simple_search" and "Parts" in df.columns:
+                df["Parts"] = df["Parts"].str.split()
+                df = df.explode("Parts")
+                df[["Part", "Quantity"]] = df["Parts"].str.split(":", expand=True)
+                df["Quantity"] = pd.to_numeric(df["Quantity"], errors="coerce")
+                df = df.drop(columns=["Parts"])
+
+            return df
             
         except Exception as e:
             print(f"Error loading data from {filepath}: {e}")
