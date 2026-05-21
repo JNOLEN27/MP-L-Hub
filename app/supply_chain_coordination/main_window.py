@@ -871,6 +871,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
             # edits made directly in the frozen overlay (itemChanged from the main
             # QTableWidget may not fire for these edits).
             fv.commitData.connect(self._on_frozen_view_commit)
+            # Bidirectional column-width sync: main table → frozen view is handled
+            # inside _update_frozen_geometry; this reverse leg syncs a drag in the
+            # frozen overlay back to the main table, which then re-fires sectionResized
+            # and triggers _update_frozen_geometry so the overlay width grows/shrinks.
+            fv.horizontalHeader().sectionResized.connect(self._on_frozen_column_resized)
             ct.verticalScrollBar().valueChanged.connect(fv.verticalScrollBar().setValue)
             fv.verticalScrollBar().valueChanged.connect(ct.verticalScrollBar().setValue)
             ct.verticalHeader().sectionResized.connect(
@@ -900,6 +905,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
         item = self.coveragetable.item(idx.row(), idx.column())
         if item:
             self.oncommentchanged(item)
+
+    def _on_frozen_column_resized(self, col, _old_size, new_size):
+        ct = self.coveragetable
+        # Only write back if genuinely different to avoid a resize → sync → resize loop
+        if ct.columnWidth(col) != new_size:
+            ct.setColumnWidth(col, new_size)
 
     def _update_frozen_geometry(self):
         ct = self.coveragetable
