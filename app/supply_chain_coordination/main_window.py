@@ -823,8 +823,15 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._applyfrozencolumns()
 
     def _clearfrozencolumns(self):
+        ct = self.coveragetable
+        for c in range(ct.columnCount()):
+            header = ct.horizontalHeaderItem(c)
+            name = header.text() if header else ''
+            if name in self._frozen_cols and name not in self._hidden_coverage_columns:
+                ct.setColumnHidden(c, False)
         self._frozen_cols.clear()
         self._frozen_view.hide()
+        ct.setViewportMargins(0, 0, 0, 0)
 
     def setcoveragecolumnvisible(self, columnname, visible):
         colindex = self._getcoveragecolumnindex(columnname)
@@ -886,14 +893,20 @@ class SupplyChainCoordinationWindow(QMainWindow):
         ncols = ct.columnCount()
         if not self._frozen_cols or ncols == 0:
             fv.hide()
+            ct.setViewportMargins(0, 0, 0, 0)
             return
         for c in range(ncols):
             header = ct.horizontalHeaderItem(c)
             name = header.text() if header else ''
-            frozen = name in self._frozen_cols and not ct.isColumnHidden(c)
-            fv.setColumnHidden(c, not frozen)
-            if frozen:
+            user_hidden = name in self._hidden_coverage_columns
+            is_frozen = name in self._frozen_cols and not user_hidden
+            fv.setColumnHidden(c, not is_frozen)
+            if is_frozen:
                 fv.setColumnWidth(c, ct.columnWidth(c))
+                ct.setColumnHidden(c, True)
+            else:
+                if not user_hidden:
+                    ct.setColumnHidden(c, False)
         for r in range(ct.rowCount()):
             fv.verticalHeader().resizeSection(r, ct.rowHeight(r))
         self._update_frozen_geometry()
@@ -926,22 +939,26 @@ class SupplyChainCoordinationWindow(QMainWindow):
         ct = self.coveragetable
         fv = self._frozen_view
         if not self._frozen_cols or ct.columnCount() == 0:
+            ct.setViewportMargins(0, 0, 0, 0)
             return
         frozen_width = 0
         for c in range(ct.columnCount()):
             header = ct.horizontalHeaderItem(c)
             name = header.text() if header else ''
-            if name in self._frozen_cols and not ct.isColumnHidden(c):
-                fv.setColumnWidth(c, ct.columnWidth(c))
-                frozen_width += ct.columnWidth(c)
+            if name in self._frozen_cols and name not in self._hidden_coverage_columns:
+                width = ct.columnWidth(c)
+                fv.setColumnWidth(c, width)
+                frozen_width += width
         if frozen_width == 0:
             fv.hide()
+            ct.setViewportMargins(0, 0, 0, 0)
             return
         vhw = ct.verticalHeader().width()
         fw = ct.frameWidth()
         hh = ct.horizontalHeader().height()
         fv.horizontalHeader().setFixedHeight(hh)
         fv.setGeometry(vhw + fw, fw, frozen_width, ct.viewport().height() + hh)
+        ct.setViewportMargins(frozen_width, 0, 0, 0)
 
     def eventFilter(self, obj, event):
         if obj is self._frozen_view and event.type() == QEvent.Wheel:
