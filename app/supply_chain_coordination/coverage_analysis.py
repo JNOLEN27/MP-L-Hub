@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
+from app.utils.config import LOCALAPPDATA
 
 
 def _normalize_df(df: pd.DataFrame, data_key: str, mapping: dict) -> pd.DataFrame:
@@ -86,50 +87,11 @@ class CoverageAnalysisEngine:
         try:
             from app.supply_chain_coordination.adjustment_store import AdjustmentStore
             col_mapping = AdjustmentStore.load_column_mapping()
-    
+
             splunk_raw = _normalize_df(
                 self.import_manager.loaddata("splunk_receiving_data"),
                 'splunk_receiving_data', col_mapping,
             )
-    
-            asn_df = self.import_manager.loaddata("asn_simple_search")
-    
-            if not asn_df.empty:
-                asn_df["TO"] = asn_df["TO"].astype(str).str.strip()
-                asn_df["Part"] = asn_df["Part"].astype(str).str.strip().str.upper()
-    
-            splunk_df = splunk_raw.copy()
-            if not splunk_df.empty:
-                splunk_df["TO"] = splunk_df["TO Number"].astype(str).str.strip()
-                splunk_df["Part Number"] = splunk_df["Part Number"].astype(str).str.strip().str.upper()
-    
-            if not splunk_df.empty:
-                merged_df = splunk_df.merge(
-                    asn_df[["TO", "Part", "Quantity"]] if not asn_df.empty else pd.DataFrame(),
-                    left_on=["TO", "Part Number"],
-                    right_on=["TO", "Part"],
-                    how="left"
-                )
-            else:
-                merged_df = pd.DataFrame()
-    
-            qty_col = None
-            for col in ["Quantity", "QTY", "Qty", "QUANTITY"]:
-                if col in splunk_df.columns:
-                    qty_col = col
-                    break
-                    
-            if not merged_df.empty:
-                if qty_col:
-                    merged_df["_final_qty"] = merged_df["Quantity"].where(
-                        merged_df["Quantity"].notna(),
-                        merged_df[qty_col]
-                    )
-                else:
-                    merged_df["_final_qty"] = merged_df["Quantity"].fillna(0)
-    
-            merged_df = _apply_delivery_adjustments(merged_df, 'splunk')
-    
             data = {
                 'current_inventory': _normalize_df(
                     self.import_manager.loaddata("current_inventory_report"),
@@ -151,14 +113,14 @@ class CoverageAnalysisEngine:
                     self.import_manager.loaddata("part_requirement_split_3"),
                     'part_requirement_split', col_mapping,
                 ),
-                'splunk_data': merged_df,
+                'splunk_data': _apply_delivery_adjustments(splunk_raw, 'splunk'),
             }
-    
+
             if data['current_inventory'].empty or data['master_data'].empty:
                 return False, "Current Inventory Report and Master Data are required.", data
-    
+
             return True, "Data loaded successfully", data
-    
+
         except Exception as e:
             return False, f"Error loading data: {str(e)}", {}
  
@@ -180,24 +142,73 @@ class CoverageAnalysisEngine:
             coveragedf = coveragedf.sort_values(sort_cols).reset_index(drop=True)
         return coveragedf
  
+    def _sharedcommentsfile(self):
+        return self.import_manager.importsdir.parent / "coveragecomments.json"
+
+    def _localcommentsfile(self):
+        return LOCALAPPDATA / "coveragecomments_pending.json"
+
+    def loadpendingcoveragecomments(self) -> Dict[str, str]:
+        lf = self._localcommentsfile()
+        if lf.exists():
+            try:
+                with open(lf, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading local pending comments: {e}")
+        return {}
+
     def loadcoveragecomments(self) -> Dict[str, str]:
-        commentsfile = self.import_manager.importsdir.parent / "coveragecomments.json"
+        # Load shared baseline
+        shared = {}
+        commentsfile = self._sharedcommentsfile()
         if commentsfile.exists():
             try:
                 with open(commentsfile, 'r') as f:
-                    return json.load(f)
+                    shared = json.load(f)
             except Exception as e:
                 print(f"Error loading comments: {e}")
-        return {}
- 
-    def savecoveragecomments(self, comments: Dict[str, str]):
-        commentsfile = self.import_manager.importsdir.parent / "coveragecomments.json"
+        # Overlay local pending (empty string = user deleted)
+        for k, v in self.loadpendingcoveragecomments().items():
+            if v:
+                shared[k] = v
+            else:
+                shared.pop(k, None)
+        return shared
+
+    def savecoveragecomments(self, pending: Dict[str, str]):
+        # Save ONLY the user's pending changes to a local file (not the shared network file)
+        lf = self._localcommentsfile()
         try:
+            lf.parent.mkdir(parents=True, exist_ok=True)
+            with open(lf, 'w') as f:
+                json.dump(pending, f, indent=2)
+        except Exception as e:
+            print(f"Error saving local pending comments: {e}")
+
+    def uploadcoveragecomments(self, pending: Dict[str, str]) -> bool:
+        """Merge pending local comments into the shared file. Returns True on success."""
+        commentsfile = self._sharedcommentsfile()
+        try:
+            shared = {}
+            if commentsfile.exists():
+                with open(commentsfile, 'r') as f:
+                    shared = json.load(f)
+            # Apply pending on top: empty string = delete, non-empty = set
+            for k, v in pending.items():
+                if v:
+                    shared[k] = v
+                else:
+                    shared.pop(k, None)
             commentsfile.parent.mkdir(parents=True, exist_ok=True)
             with open(commentsfile, 'w') as f:
-                json.dump(comments, f, indent=2)
+                json.dump(shared, f, indent=2)
+            # Clear local pending file
+            self._localcommentsfile().write_text('{}')
+            return True
         except Exception as e:
-            print(f"Error saving comments: {e}")
+            print(f"Error uploading comments: {e}")
+            return False
  
     def addcoveragecomments(self, coveragedf: pd.DataFrame) -> pd.DataFrame:
         comments = self.loadcoveragecomments()
@@ -285,7 +296,7 @@ class CoverageAnalysisEngine:
  
         return coveragedf[finalorder]
  
-    def buildcoverageanalysis(self, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 100) -> pd.DataFrame:
+    def buildcoverageanalysis(self, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 30) -> pd.DataFrame:
         uniqueparts = self.getpartswithconsumption(
             datadict['req_split_1'],
             datadict['req_split_2'],
@@ -470,7 +481,7 @@ class CoverageAnalysisEngine:
 
         return coveragedf
 
-    def adddailyprojections(self, coveragedf: pd.DataFrame, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 100) -> pd.DataFrame:
+    def adddailyprojections(self, coveragedf: pd.DataFrame, datadict: Dict[str, pd.DataFrame], target_consumption_days: int = 30) -> pd.DataFrame:
         consumptiondata = self.combineconsumptiondata(
             datadict['req_split_1'],
             datadict['req_split_2'],
@@ -509,7 +520,7 @@ class CoverageAnalysisEngine:
 
         days_created = 0
         dayoffset = 0
-        max_calendar_days = target_consumption_days * 6
+        max_calendar_days = target_consumption_days * 6  # safety cap (never loop forever)
 
         while days_created < target_consumption_days and dayoffset < max_calendar_days:
             dayoffset += 1
@@ -525,6 +536,7 @@ class CoverageAnalysisEngine:
                 for pn, qty in daily_consumption.items():
                     pending_consumption[pn] = pending_consumption.get(pn, 0) + float(qty)
 
+            # Skip days with no consumption across all parts
             if daily_consumption.empty or daily_consumption.sum() == 0:
                 continue
 
@@ -737,56 +749,53 @@ class CoverageAnalysisEngine:
     def buildpartreceipts(self, partnumber, datadict):
         receiptbydate = {}
         splunkdf = datadict.get('splunk_data', pd.DataFrame())
-    
-        if splunkdf.empty or "Part Number" not in splunkdf.columns or "_final_qty" not in splunkdf.columns:
+ 
+        if splunkdf.empty or 'Part Number' not in splunkdf.columns:
             return receiptbydate
-    
+ 
         import re as _re
         target = _re.sub(r'\.0$', '', partnumber.strip()).upper()
-    
-        df = splunkdf.copy()
-    
-        df["_part"] = (
-            df["Part Number"]
-            .astype(str)
-            .str.strip()
-            .str.replace(r'\.0$', '', regex=True)
-            .str.upper()
-        )
-    
-        df["_qty"] = pd.to_numeric(df["_final_qty"], errors="coerce").fillna(0)
-    
-        date_col = "Load Delivery Date Final"
-        if date_col not in df.columns:
+        normalized = splunkdf['Part Number'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).str.upper()
+        partreceipts = splunkdf[normalized == target]
+        if partreceipts.empty:
             return receiptbydate
-    
-        df["_date"] = pd.to_datetime(df[date_col], errors="coerce").dt.date
-    
-        def shift(d):
-            if not pd.notna(d):
-                return d
+
+        date_col = 'Load Delivery Date Final'
+        if date_col not in partreceipts.columns:
+            return receiptbydate
+
+        qty_col = self.findcolumn(splunkdf, [
+            'Quantity', 'QTY', 'Qty', 'QUANTITY', 'ARTAN',
+            'Load Quantity', 'TO Quantity', 'Receipt Qty', 'Receipt QTY',
+            'Pieces', 'Units',
+        ])
+
+        def _shift(d):
+            if not pd.notna(d): return d
             d = d + timedelta(days=1)
-            if d.weekday() == 5:
-                d += timedelta(days=2)
-            elif d.weekday() == 6:
-                d += timedelta(days=1)
+            if d.weekday() == 5: d += timedelta(days=2)
+            elif d.weekday() == 6: d += timedelta(days=1)
             return d
-    
-        df["_date"] = df["_date"].apply(shift)
-    
-        df = df[
-            (df["_part"] == target) &
-            (df["_qty"] > 0) &
-            (df["_date"].notna())
-        ]
-    
+
+        try:
+            df = partreceipts.copy()
+            df['_date'] = pd.to_datetime(df[date_col], errors='coerce').dt.date.apply(_shift)
+            df['_qty'] = (pd.to_numeric(df[qty_col], errors='coerce').fillna(0) if qty_col else pd.Series(0, index=df.index))
+            df = df[df['_qty'] > 0].dropna(subset=['_date'])
+        except Exception as e:
+            print(f"[buildpartreceipts] Error preparing data: {e}")
+            return receiptbydate
+
         for _, row in df.iterrows():
-            receiptbydate.setdefault(row["_date"], []).append({
-                "quantity": int(row["_qty"]),
-                "asn": str(row.get("TO", "")),
-                "po": ""
-            })
-    
+            try:
+                receiptbydate.setdefault(row['_date'], []).append({
+                    'quantity': int(row['_qty']),
+                    'asn': str(row.get('TO Number', '') or ''),
+                    'po': '',
+                })
+            except Exception as e:
+                print(f"[buildpartreceipts] Skipping row: {e}")
+
         return receiptbydate
  
     def findcolumn(self, df, possiblenames):
