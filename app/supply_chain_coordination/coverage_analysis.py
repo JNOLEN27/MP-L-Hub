@@ -116,8 +116,32 @@ class CoverageAnalysisEngine:
                 'splunk_data': _apply_delivery_adjustments(splunk_raw, 'splunk'),
             }
 
-            if data['current_inventory'].empty or data['master_data'].empty:
-                return False, "Current Inventory Report and Master Data are required.", data
+            missing_details = []
+            for category, label in [
+                ('current_inventory_report', 'Current Inventory Report'),
+                ('master_data', 'Master Data'),
+            ]:
+                key = 'current_inventory' if category == 'current_inventory_report' else 'master_data'
+                if data[key].empty:
+                    latest = self.import_manager.getlatestfile(category)
+                    if latest is None:
+                        missing_details.append(
+                            f"{label}: no file found in imports folder"
+                        )
+                    else:
+                        err = self.import_manager.getlasterror(category)
+                        if err:
+                            missing_details.append(
+                                f"{label}: file '{latest.name}' could not be read — {err}"
+                            )
+                        else:
+                            missing_details.append(
+                                f"{label}: file '{latest.name}' was found but loaded as empty"
+                            )
+
+            if missing_details:
+                detail_str = "\n".join(f"\u2022 {d}" for d in missing_details)
+                return False, "Required files could not be loaded:\n\n" + detail_str, data
 
             return True, "Data loaded successfully", data
 

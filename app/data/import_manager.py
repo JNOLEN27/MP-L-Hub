@@ -10,6 +10,7 @@ class DataImportManager:
     def __init__(self):
         self.importsdir = SHAREDNETWORKPATH / "imports"
         self.processeddir = SHAREDNETWORKPATH / "processed"
+        self._load_errors: Dict[str, str] = {}  # category → last read error
         
         self.importcategories = {
             "current_inventory_report": {
@@ -226,21 +227,28 @@ class DataImportManager:
         
         return max(datafiles, key=lambda f: f.stat().st_mtime)
     
+    def getlasterror(self, category: str) -> str:
+        return self._load_errors.get(category, "")
+
     def loaddata(self, category: str, filename: Optional[str] = None) -> pd.DataFrame:
+        self._load_errors.pop(category, None)
         if filename:
             filepath = self.importsdir / category / filename
         else:
             filepath = self.getlatestfile(category)
-        
+
         if not filepath or not filepath.exists():
             return pd.DataFrame()
-        
+
         try:
             if filepath.suffix.lower() == '.csv':
-                df = none
+                df = None
                 for encoding in ['utf-8', 'windows-1252', 'iso-8859-1', 'cp1252']:
                     try:
                         df = pd.read_csv(filepath, delimiter=";", encoding=encoding)
+                        if df.columns.size == 1 and ',' in df.columns[0]:
+                            # Comma-delimited file read as single-column — retry with comma
+                            df = pd.read_csv(filepath, delimiter=",", encoding=encoding)
                         break
                     except UnicodeDecodeError:
                         continue
@@ -257,9 +265,11 @@ class DataImportManager:
                 df = df.drop(columns=["Parts"])
 
             return df
-            
+
         except Exception as e:
-            print(f"Error loading data from {filepath}: {e}")
+            msg = str(e)
+            print(f"Error loading data from {filepath}: {msg}")
+            self._load_errors[category] = msg
             return pd.DataFrame()
         
     def deleteimport(self, category: str, filename: str, username: str) -> Tuple[bool, str]:
