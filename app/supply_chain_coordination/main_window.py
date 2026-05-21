@@ -866,11 +866,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
         fv = self._frozen_view
         if fv.model() is not ct.model():
             fv.setModel(ct.model())
-            # commitData fires after the delegate writes to the model, so the item
-            # text is already updated — use this as a reliable save trigger for
-            # edits made directly in the frozen overlay (itemChanged from the main
-            # QTableWidget may not fire for these edits).
-            fv.commitData.connect(self._on_frozen_view_commit)
+            # QAbstractItemDelegate.commitData is the signal (not QAbstractItemView.commitData
+            # which is a slot). QueuedConnection ensures our handler runs after setModelData
+            # has written the new value to the model — direct connection would fire first,
+            # before the item text is updated.
+            fv.itemDelegate().commitData.connect(
+                self._on_frozen_view_commit, Qt.QueuedConnection
+            )
             # Bidirectional column-width sync: main table → frozen view is handled
             # inside _update_frozen_geometry; this reverse leg syncs a drag in the
             # frozen overlay back to the main table, which then re-fires sectionResized
