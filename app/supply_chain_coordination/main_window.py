@@ -866,6 +866,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         fv = self._frozen_view
         if fv.model() is not ct.model():
             fv.setModel(ct.model())
+            # commitData fires after the delegate writes to the model, so the item
+            # text is already updated — use this as a reliable save trigger for
+            # edits made directly in the frozen overlay (itemChanged from the main
+            # QTableWidget may not fire for these edits).
+            fv.commitData.connect(self._on_frozen_view_commit)
             ct.verticalScrollBar().valueChanged.connect(fv.verticalScrollBar().setValue)
             fv.verticalScrollBar().valueChanged.connect(ct.verticalScrollBar().setValue)
             ct.verticalHeader().sectionResized.connect(
@@ -887,6 +892,14 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._update_frozen_geometry()
         fv.show()
         fv.raise_()
+
+    def _on_frozen_view_commit(self, _editor):
+        idx = self._frozen_view.currentIndex()
+        if not idx.isValid():
+            return
+        item = self.coveragetable.item(idx.row(), idx.column())
+        if item:
+            self.oncommentchanged(item)
 
     def _update_frozen_geometry(self):
         ct = self.coveragetable
