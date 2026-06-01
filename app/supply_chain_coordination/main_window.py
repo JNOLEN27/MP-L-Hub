@@ -52,11 +52,12 @@ class FrozenTableWidget(QTableWidget):
         self._in_update_geometries = True
         super().updateGeometries()
         if self._extra_left_margin > 0:
-            m = self.viewportMargins()
-            self.setViewportMargins(
-                m.left() + self._extra_left_margin,
-                m.top(), m.right(), m.bottom()
-            )
+            # Use absolute values read from the headers, NOT viewportMargins().left().
+            # viewportMargins() already includes our previous addition, so using it
+            # would accumulate: vhw+fw, vhw+2*fw, … pushing the viewport off-screen.
+            vhw = 0 if self.verticalHeader().isHidden() else self.verticalHeader().width()
+            hh = 0 if self.horizontalHeader().isHidden() else self.horizontalHeader().height()
+            self.setViewportMargins(vhw + self._extra_left_margin, hh, 0, 0)
         self._in_update_geometries = False
 
 
