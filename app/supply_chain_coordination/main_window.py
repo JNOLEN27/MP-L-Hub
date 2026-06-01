@@ -901,6 +901,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._update_frozen_geometry()
         fv.show()
         fv.raise_()
+        # Ensure the overlay sits at the left edge of the viewport so non-frozen
+        # columns are immediately visible.  If the user was scrolled right before
+        # freezing, the frozen column would be off-screen and the non-frozen
+        # content would be hidden behind the overlay.
+        ct.horizontalScrollBar().setValue(0)
 
     def _on_frozen_view_commit(self, _editor):
         idx = self._frozen_view.currentIndex()
