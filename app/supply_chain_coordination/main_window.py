@@ -748,7 +748,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.coveragetable.horizontalHeader().sectionResized.connect(
             lambda _col, _old, _new: self._update_frozen_geometry())
         self.coveragetable.horizontalScrollBar().valueChanged.connect(
-            lambda _: self.coveragetable.viewport().update() if self._frozen_cols else None)
+            lambda _: (
+                self.coveragetable.viewport().update(),
+                self.coveragetable.horizontalHeader().viewport().update()
+            ) if self._frozen_cols else None)
         layout.addWidget(self.coveragetable)
 
         self._frozen_view = QTableView(self.coveragetable)
@@ -906,6 +909,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
         # freezing, the frozen column would be off-screen and the non-frozen
         # content would be hidden behind the overlay.
         ct.horizontalScrollBar().setValue(0)
+        # setValue(0) triggers Qt's bitblt scroll on both the viewport and the
+        # horizontal header.  For large jumps Qt may only repaint the newly
+        # exposed strip, leaving stale pixels elsewhere.  Schedule full repaints
+        # on the next event-loop tick after all scroll handlers have settled.
+        QTimer.singleShot(0, ct.horizontalHeader().viewport().update)
+        QTimer.singleShot(0, ct.viewport().update)
 
     def _on_frozen_view_commit(self, _editor):
         idx = self._frozen_view.currentIndex()
