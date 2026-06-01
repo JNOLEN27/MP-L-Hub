@@ -902,7 +902,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
             is_frozen = name in self._frozen_cols and not user_hidden
             fv.setColumnHidden(c, not is_frozen)
             if is_frozen:
-                fv.setColumnWidth(c, ct.columnWidth(c))
+                # Only copy width when column is currently visible in ct.
+                # ct.columnWidth() returns 0 for hidden columns, so if this
+                # column was already frozen (hidden) on a previous call, fv
+                # already holds the correct width — don't overwrite it with 0.
+                if not ct.isColumnHidden(c):
+                    fv.setColumnWidth(c, ct.columnWidth(c))
                 ct.setColumnHidden(c, True)
             else:
                 if not user_hidden:
@@ -946,9 +951,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
             header = ct.horizontalHeaderItem(c)
             name = header.text() if header else ''
             if name in self._frozen_cols and name not in self._hidden_coverage_columns:
-                width = ct.columnWidth(c)
-                fv.setColumnWidth(c, width)
-                frozen_width += width
+                # ct.columnWidth() returns 0 for hidden columns; read from fv
+                # which always stores the correct display width.
+                frozen_width += fv.columnWidth(c)
         if frozen_width == 0:
             fv.hide()
             ct.setViewportMargins(0, 0, 0, 0)
