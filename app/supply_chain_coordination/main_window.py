@@ -58,8 +58,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._dropdowns = []
         self._hidden_coverage_columns = set()
         self._coverage_column_menu = None
-        self._recalc_filter_heights(QApplication.primaryScreen())
-        self.resize(*APPWINDOWSIZE)
+        self._current_screen = QApplication.primaryScreen()
+        self._recalc_filter_heights(self._current_screen)
+        self.resize(*self._screen_fitted_size(self._current_screen))
         self.setupui()
  
     def setupui(self):
@@ -86,7 +87,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         layout.addWidget(headerwidget)
  
-        self.setMinimumWidth(1000)
+        screen = self._current_screen or QApplication.primaryScreen()
+        min_w = min(900, int(screen.availableGeometry().width() * 0.6)) if screen else 900
+        self.setMinimumWidth(min_w)
  
         tabs = QTabWidget()
         tabs.tabBar().setElideMode(Qt.ElideNone)
@@ -151,9 +154,19 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.statusBar().showMessage(f"Logged in as: {self.userdata['username']}")
         centralwidget.setLayout(layout)
 
+    def _screen_fitted_size(self, screen):
+        if screen:
+            avail = screen.availableGeometry()
+            w = max(900, min(APPWINDOWSIZE[0], int(avail.width() * 0.90)))
+            h = max(650, min(APPWINDOWSIZE[1], int(avail.height() * 0.90)))
+            return (w, h)
+        return APPWINDOWSIZE
+
     def _recalc_filter_heights(self, screen):
-        dpi = screen.logicalDotsPerInch() if screen else 96.0
-        scale = max(0.75, min(2.0, dpi / 96.0))
+        # With AA_EnableHighDpiScaling enabled Qt normalises logicalDotsPerInch
+        # to 96, so use devicePixelRatio for any remaining manual scale factor.
+        ratio = screen.devicePixelRatio() if screen else 1.0
+        scale = max(0.75, min(2.0, ratio))
         self._filter_section_h = int(190 * scale)
         self._dropdown_h = int(170 * scale)
 
@@ -164,14 +177,46 @@ class SupplyChainCoordinationWindow(QMainWindow):
             if win is not None:
                 win.screenChanged.connect(self._on_screen_changed)
                 self._screen_signal_connected = True
-        screen = QApplication.screenAt(self.geometry().center())
+        screen = QApplication.screenAt(self.geometry().center()) or QApplication.primaryScreen()
+        if screen and screen is not getattr(self, '_current_screen', None):
+            self._connect_screen_dpi(screen)
         if screen:
             self._recalc_filter_heights(screen)
             self._reapply_filter_heights()
 
+    def _connect_screen_dpi(self, screen):
+        old = getattr(self, '_current_screen', None)
+        if old and old is not screen:
+            try:
+                old.logicalDotsPerInchChanged.disconnect(self._on_dpi_changed)
+            except Exception:
+                pass
+        self._current_screen = screen
+        try:
+            screen.logicalDotsPerInchChanged.connect(self._on_dpi_changed)
+        except Exception:
+            pass
+
     def _on_screen_changed(self, new_screen):
+        self._connect_screen_dpi(new_screen)
         self._recalc_filter_heights(new_screen)
         self._reapply_filter_heights()
+        # Shrink window if it overflows the new display's available area.
+        avail = new_screen.availableGeometry()
+        sz = self.size()
+        new_w = min(sz.width(), int(avail.width() * 0.95))
+        new_h = min(sz.height(), int(avail.height() * 0.95))
+        if new_w != sz.width() or new_h != sz.height():
+            self.resize(new_w, new_h)
+
+    def _on_dpi_changed(self, _dpi):
+        screen = getattr(self, '_current_screen', None) or QApplication.primaryScreen()
+        self._recalc_filter_heights(screen)
+        self._reapply_filter_heights()
+        fitted = self._screen_fitted_size(screen)
+        sz = self.size()
+        if sz.width() > fitted[0] or sz.height() > fitted[1]:
+            self.resize(min(sz.width(), fitted[0]), min(sz.height(), fitted[1]))
 
     def _reapply_filter_heights(self):
         if hasattr(self, 'filtersection'):

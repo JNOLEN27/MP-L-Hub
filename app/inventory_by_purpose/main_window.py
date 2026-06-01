@@ -277,7 +277,14 @@ class InventorybyPurposeWindow(QMainWindow):
             self._mc_thread = None
             self._mc_progress_dialog = None
             logger.info("Attributes set, calling resize..."); _flush()
-            self.resize(*APPWINDOWSIZE)
+            screen = QApplication.primaryScreen()
+            if screen:
+                avail = screen.availableGeometry()
+                w = max(900, min(APPWINDOWSIZE[0], int(avail.width() * 0.90)))
+                h = max(650, min(APPWINDOWSIZE[1], int(avail.height() * 0.90)))
+                self.resize(w, h)
+            else:
+                self.resize(*APPWINDOWSIZE)
             logger.info("resize OK"); _flush()
             self.setAttribute(Qt.WA_DeleteOnClose)
             logger.info("setAttribute OK"); _flush()
@@ -329,7 +336,9 @@ class InventorybyPurposeWindow(QMainWindow):
 
             layout.addWidget(headerwidget)
 
-            self.setMinimumWidth(1000)
+            _scr = QApplication.primaryScreen()
+            _min_w = min(900, int(_scr.availableGeometry().width() * 0.6)) if _scr else 900
+            self.setMinimumWidth(_min_w)
 
             logger.info("Creating tabs...")
             tabs = QTabWidget()
