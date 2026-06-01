@@ -70,6 +70,13 @@ class Application:
             del self.openappwindows[appkey]
             
 def main():
+    # Must be set before QApplication is instantiated.
+    # AA_EnableHighDpiScaling: Qt renders at physical resolution and uses
+    # device-independent logical pixels, so all sizing is correct at any
+    # Windows display scale (100%, 125%, 150%, …).
+    # AA_UseHighDpiPixmaps: icons / pixmaps are loaded at physical resolution.
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = Application()
     sys.exit(app.run())
 
