@@ -39,6 +39,27 @@ class _BackgroundDelegate(QStyledItemDelegate):
             option.backgroundBrush = brush
 
 
+class FrozenTableWidget(QTableWidget):
+    """QTableWidget that reserves extra left-margin space for a frozen-column overlay."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._extra_left_margin = 0
+        self._in_update_geometries = False
+
+    def updateGeometries(self):
+        if self._in_update_geometries:
+            return
+        self._in_update_geometries = True
+        super().updateGeometries()
+        if self._extra_left_margin > 0:
+            m = self.viewportMargins()
+            self.setViewportMargins(
+                m.left() + self._extra_left_margin,
+                m.top(), m.right(), m.bottom()
+            )
+        self._in_update_geometries = False
+
+
 class SupplyChainCoordinationWindow(QMainWindow):
     def __init__(self, userdata, parent=None):
         super().__init__(parent)
@@ -742,7 +763,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout.addWidget(self.filtersection)
 
         self._frozen_cols = set()
-        self.coveragetable = QTableWidget()
+        self.coveragetable = FrozenTableWidget()
         self.coveragetable.setWordWrap(True)
         self.coveragetable.setSortingEnabled(True)
         self.coveragetable.horizontalHeader().sectionResized.connect(
@@ -831,7 +852,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 ct.setColumnHidden(c, False)
         self._frozen_cols.clear()
         self._frozen_view.hide()
-        ct.setViewportMargins(0, 0, 0, 0)
+        ct._extra_left_margin = 0
+        ct.updateGeometries()
 
     def setcoveragecolumnvisible(self, columnname, visible):
         colindex = self._getcoveragecolumnindex(columnname)
@@ -893,7 +915,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
         ncols = ct.columnCount()
         if not self._frozen_cols or ncols == 0:
             fv.hide()
-            ct.setViewportMargins(0, 0, 0, 0)
+            ct._extra_left_margin = 0
+            ct.updateGeometries()
             return
         for c in range(ncols):
             header = ct.horizontalHeaderItem(c)
@@ -944,7 +967,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
         ct = self.coveragetable
         fv = self._frozen_view
         if not self._frozen_cols or ct.columnCount() == 0:
-            ct.setViewportMargins(0, 0, 0, 0)
+            ct._extra_left_margin = 0
+            ct.updateGeometries()
             return
         frozen_width = 0
         for c in range(ct.columnCount()):
@@ -956,14 +980,16 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 frozen_width += fv.columnWidth(c)
         if frozen_width == 0:
             fv.hide()
-            ct.setViewportMargins(0, 0, 0, 0)
+            ct._extra_left_margin = 0
+            ct.updateGeometries()
             return
         vhw = ct.verticalHeader().width()
         fw = ct.frameWidth()
         hh = ct.horizontalHeader().height()
         fv.horizontalHeader().setFixedHeight(hh)
         fv.setGeometry(vhw + fw, fw, frozen_width, ct.viewport().height() + hh)
-        ct.setViewportMargins(frozen_width, 0, 0, 0)
+        ct._extra_left_margin = frozen_width
+        ct.updateGeometries()
 
     def eventFilter(self, obj, event):
         if obj is self._frozen_view and event.type() == QEvent.Wheel:
