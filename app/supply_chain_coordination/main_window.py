@@ -902,19 +902,22 @@ class SupplyChainCoordinationWindow(QMainWindow):
         for r in range(ct.rowCount()):
             fv.verticalHeader().resizeSection(r, ct.rowHeight(r))
         self._update_frozen_geometry()
+        # Batch the scroll reset and overlay show inside a setUpdatesEnabled
+        # cycle so that Qt performs a single, complete repaint of the entire
+        # coveragetable subtree (viewport + header + overlay) all at once.
+        # Without this, showing the overlay while the viewport is in a
+        # partially-dirty state leaves the unfrozen column area blank —
+        # the same cycle that generatecoverageanalysis uses is what makes
+        # generate-then-freeze work correctly.
+        ct.setUpdatesEnabled(False)
+        ct.horizontalScrollBar().setValue(0)
         fv.show()
         fv.raise_()
-        # Ensure the overlay sits at the left edge of the viewport so non-frozen
-        # columns are immediately visible.  If the user was scrolled right before
-        # freezing, the frozen column would be off-screen and the non-frozen
-        # content would be hidden behind the overlay.
-        ct.horizontalScrollBar().setValue(0)
-        # setValue(0) triggers Qt's bitblt scroll on both the viewport and the
-        # horizontal header.  For large jumps Qt may only repaint the newly
-        # exposed strip, leaving stale pixels elsewhere.  Schedule full repaints
-        # on the next event-loop tick after all scroll handlers have settled.
-        QTimer.singleShot(0, ct.horizontalHeader().viewport().update)
+        ct.setUpdatesEnabled(True)
+        # Second repaint pass on the next tick to catch any stale pixels that
+        # the re-enable repaint misses (e.g. bitblt artefacts in the header).
         QTimer.singleShot(0, ct.viewport().update)
+        QTimer.singleShot(0, ct.horizontalHeader().viewport().update)
 
     def _on_frozen_view_commit(self, _editor):
         idx = self._frozen_view.currentIndex()
