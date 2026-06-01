@@ -902,20 +902,18 @@ class SupplyChainCoordinationWindow(QMainWindow):
         for r in range(ct.rowCount()):
             fv.verticalHeader().resizeSection(r, ct.rowHeight(r))
         self._update_frozen_geometry()
-        # Batch the scroll reset and overlay show inside a setUpdatesEnabled
-        # cycle so that Qt performs a single, complete repaint of the entire
-        # coveragetable subtree (viewport + header + overlay) all at once.
-        # Without this, showing the overlay while the viewport is in a
-        # partially-dirty state leaves the unfrozen column area blank —
-        # the same cycle that generatecoverageanalysis uses is what makes
-        # generate-then-freeze work correctly.
-        ct.setUpdatesEnabled(False)
+        # Reset scroll first so frozen columns sit at the left edge of the viewport.
         ct.horizontalScrollBar().setValue(0)
+        # Repaint the main table synchronously BEFORE showing the overlay so
+        # the unfrozen column area is fully rendered at position 0 before the
+        # frozen view appears on top.  Showing the overlay first and repainting
+        # afterward leaves a window where Qt can clear the unfrozen area.
+        ct.viewport().repaint()
+        ct.horizontalHeader().viewport().repaint()
         fv.show()
         fv.raise_()
-        ct.setUpdatesEnabled(True)
-        # Second repaint pass on the next tick to catch any stale pixels that
-        # the re-enable repaint misses (e.g. bitblt artefacts in the header).
+        # Deferred second pass to catch any paint artefacts introduced by the
+        # overlay widget becoming visible in the hierarchy.
         QTimer.singleShot(0, ct.viewport().update)
         QTimer.singleShot(0, ct.horizontalHeader().viewport().update)
 
