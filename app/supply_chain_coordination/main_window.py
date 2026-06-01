@@ -892,6 +892,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if not self._frozen_cols or ncols == 0:
             fv.hide()
             return
+        # Block fv's header signals while configuring column visibility so that
+        # setColumnHidden(c, True) doesn't emit sectionResized(c, old, 0) and
+        # trigger _on_frozen_column_resized, which would set ct.columnWidth(c)=0
+        # and make every unfrozen column invisible in the main table.
+        fv.horizontalHeader().blockSignals(True)
         for c in range(ncols):
             header = ct.horizontalHeaderItem(c)
             name = header.text() if header else ''
@@ -899,6 +904,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             fv.setColumnHidden(c, not frozen)
             if frozen:
                 fv.setColumnWidth(c, ct.columnWidth(c))
+        fv.horizontalHeader().blockSignals(False)
         for r in range(ct.rowCount()):
             fv.verticalHeader().resizeSection(r, ct.rowHeight(r))
         self._update_frozen_geometry()
