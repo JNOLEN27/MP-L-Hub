@@ -131,8 +131,8 @@ class SupplyChainCoordinationWindow(QMainWindow):
         # reference display — not the same absolute pixel count.
         if screen:
             avail = screen.availableGeometry()
-            scale = min(avail.width() / 1920.0, avail.height() / 1200.0)
-            scale = max(0.55, min(1.25, scale))
+            scale = min(avail.width() / 1920.0, avail.height() / 1080.0)
+            scale = max(0.60, min(1.0, scale))
         else:
             scale = 1.0
         self._ui_scale = scale
