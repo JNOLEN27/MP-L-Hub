@@ -13,8 +13,8 @@ class LoginDialog(QDialog):
         screen = QApplication.primaryScreen()
         if screen:
             avail = screen.availableGeometry()
-            scale = min(avail.width() / 1920.0, avail.height() / 1200.0)
-            self._ui_scale = max(0.55, min(1.25, scale))
+            scale = min(avail.width() / 1920.0, avail.height() / 1080.0)
+            self._ui_scale = max(0.60, min(1.0, scale))
         else:
             self._ui_scale = 1.0
         self.setWindowTitle("Material Planning and Logistics Hub - Login")

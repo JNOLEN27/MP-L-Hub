@@ -20,8 +20,8 @@ class DataImportsWindow(QMainWindow):
         screen = QApplication.primaryScreen()
         if screen:
             avail = screen.availableGeometry()
-            scale = min(avail.width() / 1920.0, avail.height() / 1200.0)
-            self._ui_scale = max(0.55, min(1.25, scale))
+            scale = min(avail.width() / 1920.0, avail.height() / 1080.0)
+            self._ui_scale = max(0.60, min(1.0, scale))
             self.resize(max(700, int(1000 * self._ui_scale)), max(500, int(700 * self._ui_scale)))
         else:
             self._ui_scale = 1.0
