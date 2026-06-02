@@ -137,7 +137,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             scale = 1.0
         self._ui_scale = scale
         # Dropdown height independent of filter section — just fits the list widget.
-        self._dropdown_h = max(55, int(120 * scale))
+        self._dropdown_h = max(70, int(145 * scale))
         # Coverage Dashboard filter needs room for 2 rows of scaled search filters.
         search_row_h = max(45, int(85 * scale))
         self._filter_section_h = max(self._dropdown_h + 20, 2 * search_row_h + 15)
@@ -1158,8 +1158,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.alertfiltersection = self.createalertfiltersection()
         layout.addWidget(self.alertfiltersection)
  
-        tablestyle = """QTableWidget {gridline-color: #d0d0d0; background-color: white;} QTableWidget::item {padding: 6px; border: 1px solid #d0d0d0;} QHeaderView::section {background-color: #f0f0f0; padding: 8px; border: 1px solid #d0d0d0; font-weight: bold;}"""
- 
+        _tpad = max(2, self._sz(4))
+        _hpad = max(4, self._sz(6))
+        _tfont = max(9, self._sz(11))
+        tablestyle = f"QTableWidget {{gridline-color: #d0d0d0; background-color: white; font-size: {_tfont}px;}} QTableWidget::item {{padding: {_tpad}px; border: 1px solid #d0d0d0;}} QHeaderView::section {{background-color: #f0f0f0; padding: {_hpad}px; border: 1px solid #d0d0d0; font-weight: bold; font-size: {_tfont}px;}}"
+
         scrollarea = QScrollArea()
         scrollarea.setWidgetResizable(True)
         self.alertstable = QTableWidget()
@@ -1203,8 +1206,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.piwdfiltersection = self.createpiwdfiltersection()
         layout.addWidget(self.piwdfiltersection)
         
-        tablestyle = """QTableWidget {gridline-color: #d0d0d0; background-color: white;} QTableWidget::item {padding: 6px; border: 1px solid #d0d0d0;} QHeaderView::section {background-color: #f0f0f0; padding: 8px; border: 1px solid #d0d0d0; font-weight: bold;}"""
-        
+        _tpad = max(2, self._sz(4))
+        _hpad = max(4, self._sz(6))
+        _tfont = max(9, self._sz(11))
+        tablestyle = f"QTableWidget {{gridline-color: #d0d0d0; background-color: white; font-size: {_tfont}px;}} QTableWidget::item {{padding: {_tpad}px; border: 1px solid #d0d0d0;}} QHeaderView::section {{background-color: #f0f0f0; padding: {_hpad}px; border: 1px solid #d0d0d0; font-weight: bold; font-size: {_tfont}px;}}"
+
         scrollarea = QScrollArea()
         scrollarea.setWidgetResizable(True)
         self.piwdtable = QTableWidget()
