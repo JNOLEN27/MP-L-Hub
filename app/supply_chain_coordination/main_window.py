@@ -80,58 +80,20 @@ class SupplyChainCoordinationWindow(QMainWindow):
         headerlayout.setContentsMargins(10, 8, 10, 8)
  
         title = QLabel("Supply Chain Coordination")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setFont(QFont("Arial", max(11, self._sz(18)), QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: white; background-color: transparent;")
         headerlayout.addWidget(title)
- 
+
         layout.addWidget(headerwidget)
- 
-        screen = self._current_screen or QApplication.primaryScreen()
-        min_w = min(900, int(screen.availableGeometry().width() * 0.6)) if screen else 900
-        self.setMinimumWidth(min_w)
- 
+
+        self.setMinimumWidth(max(700, self._sz(900)))
+
         tabs = QTabWidget()
         tabs.tabBar().setElideMode(Qt.ElideNone)
         tabs.tabBar().setExpanding(False)
-        tabs.setStyleSheet("""
-            QTabWidget {
-                background-color: #CCECFF;
-            }
-            QTabWidget::pane {
-                background-color: white;
-                border: 1px solid #99CCEE;
-                border-top: 0px;
-            }
-            QTabBar {
-                background-color: #156082;
-            }
-            QTabBar QToolButton {
-                background-color: #156082;
-                border: 1px solid #99CCEE;
-                color: white;
-            }
-            QTabBar::tab {
-                background-color: white;
-                color: #1A3A6B;
-                font-weight: bold;
-                padding: 6px 14px;
-                min-width: 172px;
-                border: 1px solid #99CCEE;
-                border-bottom: none;
-                border-radius: 4px 4px 0px 0px;
-                margin-right: 2px;
-            }
-            QTabBar::tab:selected {
-                background-color: #CCECFF;
-                color: black;
-                border: 1px solid #99CCEE;
-                border-bottom: 1px solid #CCECFF;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #E8F6FF;
-            }
-        """)
+        self._tabs = tabs
+        self._apply_tab_stylesheet()
  
         coveragedashtab = self.createcoveragedashboard()
         coverageindivtab = self.createindividualpartcoverage()
@@ -173,8 +135,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
             scale = max(0.55, min(1.25, scale))
         else:
             scale = 1.0
+        self._ui_scale = scale
         self._filter_section_h = int(190 * scale)
         self._dropdown_h = max(55, self._filter_section_h - 20)
+
+    def _sz(self, n):
+        return max(1, int(n * self._ui_scale))
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -224,6 +190,48 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if sz.width() > fitted[0] or sz.height() > fitted[1]:
             self.resize(min(sz.width(), fitted[0]), min(sz.height(), fitted[1]))
 
+    def _apply_tab_stylesheet(self):
+        if not hasattr(self, '_tabs'):
+            return
+        s = self._ui_scale
+        tab_font = max(8, self._sz(11))
+        tab_pad_v = max(3, self._sz(6))
+        tab_pad_h = max(5, self._sz(14))
+        tab_min_w = max(70, self._sz(150))
+        self._tabs.setStyleSheet(f"""
+            QTabWidget {{ background-color: #CCECFF; }}
+            QTabWidget::pane {{
+                background-color: white;
+                border: 1px solid #99CCEE;
+                border-top: 0px;
+            }}
+            QTabBar {{ background-color: #156082; }}
+            QTabBar QToolButton {{
+                background-color: #156082;
+                border: 1px solid #99CCEE;
+                color: white;
+            }}
+            QTabBar::tab {{
+                background-color: white;
+                color: #1A3A6B;
+                font-weight: bold;
+                font-size: {tab_font}px;
+                padding: {tab_pad_v}px {tab_pad_h}px;
+                min-width: {tab_min_w}px;
+                border: 1px solid #99CCEE;
+                border-bottom: none;
+                border-radius: 4px 4px 0px 0px;
+                margin-right: 2px;
+            }}
+            QTabBar::tab:selected {{
+                background-color: #CCECFF;
+                color: black;
+                border: 1px solid #99CCEE;
+                border-bottom: 1px solid #CCECFF;
+            }}
+            QTabBar::tab:hover:!selected {{ background-color: #E8F6FF; }}
+        """)
+
     def _reapply_filter_heights(self):
         if hasattr(self, 'filtersection'):
             self.filtersection.setMaximumHeight(self._filter_section_h)
@@ -231,6 +239,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
             self.alertfiltersection.setMaximumHeight(self._filter_section_h)
         for dd in self._dropdowns:
             dd.setFixedHeight(self._dropdown_h)
+        self._apply_tab_stylesheet()
 
     def createfiltersection(self):
         widget = QWidget()
@@ -239,7 +248,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QHBoxLayout()
 
         filterlabel = QLabel("Filters:")
-        filterlabel.setFont(QFont("Arial", 12, QFont.Bold))
+        filterlabel.setFont(QFont("Arial", max(8, self._sz(12)), QFont.Bold))
         filterlabel.setAlignment(Qt.AlignTop)
         layout.addWidget(filterlabel)
  
@@ -338,7 +347,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QHBoxLayout()
  
         filterlabel = QLabel("Filters:")
-        filterlabel.setFont(QFont("Arial", 12, QFont.Bold))
+        filterlabel.setFont(QFont("Arial", max(8, self._sz(12)), QFont.Bold))
         filterlabel.setAlignment(Qt.AlignTop)
         layout.addWidget(filterlabel)
  
@@ -748,15 +757,17 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QVBoxLayout()
 
         title = QLabel("Coverage Dashboard")
-        title.setFont(QFont("Arial", 16, QFont.Bold))
+        title.setFont(QFont("Arial", max(10, self._sz(16)), QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
         buttonlayout = QHBoxLayout()
 
+        _bpv = max(4, self._sz(10))
+        _bph = max(8, self._sz(20))
         loadbtn = QPushButton("Generate Coverage Analysis")
         loadbtn.clicked.connect(self.generatecoverageanalysis)
-        loadbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
+        loadbtn.setStyleSheet(f"QPushButton {{background-color: #156082; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #45a049;}}")
         buttonlayout.addWidget(loadbtn)
 
         refreshbtn = QPushButton("Refresh Data")
@@ -783,7 +794,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
         uploadcommentsbtn = QPushButton("Upload Comments")
         uploadcommentsbtn.clicked.connect(self._uploadcoveragecomments)
-        uploadcommentsbtn.setStyleSheet("""QPushButton {background-color: #D17000; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #E8860A;}""")
+        uploadcommentsbtn.setStyleSheet(f"QPushButton {{background-color: #D17000; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #E8860A;}}")
         buttonlayout.addWidget(uploadcommentsbtn)
 
         buttonlayout.addStretch()
@@ -1194,7 +1205,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QHBoxLayout()
 
         filterlabel = QLabel("Filters:")
-        filterlabel.setFont(QFont("Arial", 12, QFont.Bold))
+        filterlabel.setFont(QFont("Arial", max(8, self._sz(12)), QFont.Bold))
         filterlabel.setAlignment(Qt.AlignTop)
         layout.addWidget(filterlabel)
 
