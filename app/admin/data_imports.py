@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGridLayout, QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGridLayout, QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from pathlib import Path
@@ -17,9 +17,20 @@ class DataImportsWindow(QMainWindow):
         self._allowedcategories = None if self._isadmin else set(POWERUSERS.get(username, []))
         
         self.setWindowTitle("Data Imports - Admin Panel" if self._isadmin else "Data Imports")
-        self.resize(1000,700)
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            scale = min(avail.width() / 1920.0, avail.height() / 1200.0)
+            self._ui_scale = max(0.55, min(1.25, scale))
+            self.resize(max(700, int(1000 * self._ui_scale)), max(500, int(700 * self._ui_scale)))
+        else:
+            self._ui_scale = 1.0
+            self.resize(1000, 700)
         self.setupui()
-        
+
+    def _sz(self, n):
+        return max(1, int(n * self._ui_scale))
+
     def setupui(self):
         centralwidget = QWidget()
         self.setCentralWidget(centralwidget)
@@ -31,7 +42,7 @@ class DataImportsWindow(QMainWindow):
         headerlayout.setContentsMargins(0, 4, 0, 4)
         
         title = QLabel("Data Imports Manager")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setFont(QFont("Arial", max(12, self._sz(18)), QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: white; background-color: transparent;")
         headerlayout.addWidget(title)
@@ -58,11 +69,11 @@ class DataImportsWindow(QMainWindow):
         layout = QVBoxLayout()
         
         sectiontitle = QLabel("Import Data Files")
-        sectiontitle.setFont(QFont("Arial", 14, QFont.Bold))
+        sectiontitle.setFont(QFont("Arial", max(10, self._sz(14)), QFont.Bold))
         layout.addWidget(sectiontitle)
-        
+
         grid = QGridLayout()
-        grid.setSpacing(15)
+        grid.setSpacing(self._sz(15))
         
         importbuttons = [
             {"title": "Current Inventory Report",
@@ -135,8 +146,8 @@ class DataImportsWindow(QMainWindow):
     def createimportbutton(self, buttoninfo):
         allowed = self._allowedcategories is None or buttoninfo["category"] in self._allowedcategories
         widget = QWidget()
-        widget.setMinimumHeight(120)
-        
+        widget.setMinimumHeight(self._sz(120))
+
         if allowed:
             widget.setStyleSheet("""QWidget {background-color: #156082; border: none; border-radius: 8px; padding: 4px;}""")
             
@@ -147,7 +158,7 @@ class DataImportsWindow(QMainWindow):
  
         titlelayout = QHBoxLayout()
         titlelabel = QLabel(buttoninfo["title"])
-        titlelabel.setFont(QFont("Arial", 12, QFont.Bold))
+        titlelabel.setFont(QFont("Arial", max(9, self._sz(12)), QFont.Bold))
         titlelabel.setAlignment(Qt.AlignCenter)
         titlelabel.setStyleSheet("color: white; background-color: transparent")
         
@@ -159,7 +170,7 @@ class DataImportsWindow(QMainWindow):
         layout.addLayout(titlelayout)
  
         descriptionlabel = QLabel(buttoninfo["description"])
-        descriptionlabel.setFont(QFont("Arial", 10))
+        descriptionlabel.setFont(QFont("Arial", max(8, self._sz(10))))
         descriptionlabel.setStyleSheet("color: #0e2841; background-color: transparent;")
         descriptionlabel.setAlignment(Qt.AlignCenter)
         descriptionlabel.setWordWrap(True)
@@ -220,7 +231,7 @@ class DataImportsWindow(QMainWindow):
         layout = QVBoxLayout()
         
         title = QLabel("Recent Imports")
-        title.setFont(QFont("Arial", 14, QFont.Bold))
+        title.setFont(QFont("Arial", max(10, self._sz(14)), QFont.Bold))
         layout.addWidget(title)
         
         self.historytable = QTableWidget()

@@ -1,6 +1,6 @@
 import re
 
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QGridLayout, QSizePolicy
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
 
@@ -12,12 +12,12 @@ from app.utils.config import (
 )
 
 class WrappedButton(QPushButton):
-    def __init__(self, text, parent=None):
+    def __init__(self, text, font_size=16, parent=None):
         super().__init__(parent)
         self._label = QLabel(text, self)
         self._label.setWordWrap(True)
         self._label.setAlignment(Qt.AlignCenter)
-        self._label.setFont(QFont("Arial", 16))
+        self._label.setFont(QFont("Arial", font_size))
         self._label.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         self._defaultcolor = None
@@ -60,16 +60,29 @@ class LauncherWindow(QMainWindow):
         self.userdata = userdata
         self.permissions = PermissionsManager()
         self.setWindowTitle(WINDOWTITLE)
-        self.resize(*LAUNCHERWINDOWSIZE)
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            scale = min(avail.width() / 1920.0, avail.height() / 1200.0)
+            self._ui_scale = max(0.55, min(1.25, scale))
+            w = max(500, int(LAUNCHERWINDOWSIZE[0] * self._ui_scale))
+            h = max(350, int(LAUNCHERWINDOWSIZE[1] * self._ui_scale))
+            self.resize(w, h)
+        else:
+            self._ui_scale = 1.0
+            self.resize(*LAUNCHERWINDOWSIZE)
         self.setupui()
         QTimer.singleShot(1000, self._checkforupdate)
+
+    def _sz(self, n):
+        return max(1, int(n * self._ui_scale))
         
     def setupui(self):
         centralwidget = QWidget()
         self.setCentralWidget(centralwidget)
-        
+
         layout = QVBoxLayout()
-        layout.setSpacing(20)
+        layout.setSpacing(self._sz(20))
         
         header = self.createheader()
         layout.addWidget(header)
@@ -92,13 +105,13 @@ class LauncherWindow(QMainWindow):
         widgetlayout.setContentsMargins(0, 4, 0, 4)
         
         title = QLabel("VCCH Material Planning and Logistics Hub")
-        title.setFont(QFont("Arial",18, QFont.Bold))
+        title.setFont(QFont("Arial", max(12, self._sz(18)), QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: white; background-color: transparent;")
         widgetlayout.addWidget(title)
-        
+
         welcome = QLabel(f"Welcome, {self.userdata['username']}!")
-        welcome.setFont(QFont("Arial",12))
+        welcome.setFont(QFont("Arial", max(9, self._sz(12))))
         welcome.setAlignment(Qt.AlignCenter)
         welcome.setStyleSheet("color: white; background-color: transparent;")
         widgetlayout.addWidget(welcome)
@@ -111,23 +124,23 @@ class LauncherWindow(QMainWindow):
         layout = QVBoxLayout()
         
         label = QLabel("Available Applications")
-        label.setFont(QFont("Arial", 20, QFont.Bold))
+        label.setFont(QFont("Arial", max(13, self._sz(20)), QFont.Bold))
         layout.addWidget(label)
-        
+
         grid = QGridLayout()
-        grid.setSpacing(15)
-        
+        grid.setSpacing(self._sz(15))
+
         userapps = self.permissions.getuserapps(self.userdata['userid'])
-        
+
         row = 0
         col = 0
         maxcols = 2
         for appkey, appinfo in AVAILABLEAPPS.items():
             appname = appinfo['name']
             hasaccess = appname in userapps
-            
-            btn = WrappedButton(appinfo['name'])
-            btn.setMinimumHeight(100)
+
+            btn = WrappedButton(appinfo['name'], font_size=max(10, self._sz(16)))
+            btn.setMinimumHeight(self._sz(100))
             
             if hasaccess:
                 btn.setStyleSheet("""QPushButton {background-color: #156082; color: #0e2841; border: none; border-radius: 5px; padding: 10px;} QPushButton:hover {background-color: #45a049; color: green;}""")
@@ -184,7 +197,7 @@ class LauncherWindow(QMainWindow):
         layout.addStretch()
 
         versionlabel = QLabel(f"v{APP_VERSION}")
-        versionlabel.setStyleSheet("color: #888; font-size: 10px; padding-right: 8px;")
+        versionlabel.setStyleSheet(f"color: #888; font-size: {max(8, self._sz(10))}px; padding-right: 8px;")
         layout.addWidget(versionlabel)
 
         exitbtn = QPushButton("Exit")
