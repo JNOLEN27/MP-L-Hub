@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QCheckBox, QMessageBox, QScrollArea, QWidget
+from PyQt5.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QCheckBox, QMessageBox, QScrollArea, QWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 
@@ -11,12 +11,22 @@ class AccessRequestDialog(QDialog):
         self.userid = userid
         self.username = username
         self.permissions = PermissionsManager()
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            scale = min(avail.width() / 1920.0, avail.height() / 1200.0)
+            self._ui_scale = max(0.55, min(1.25, scale))
+        else:
+            self._ui_scale = 1.0
         self.setWindowTitle("Request Application Access")
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(400)
+        self.setMinimumWidth(max(350, int(500 * self._ui_scale)))
+        self.setMinimumHeight(max(300, int(400 * self._ui_scale)))
         self.setModal(True)
         self.appcheckboxes = {}
         self.setupui()
+
+    def _sz(self, n):
+        return max(1, int(n * self._ui_scale))
     
     def setupui(self):
         layout = QVBoxLayout()
@@ -26,20 +36,20 @@ class AccessRequestDialog(QDialog):
         headerlayout.setContentsMargins(0, 4, 0, 4)
  
         title = QLabel("Request Access to Applications")
-        title.setFont(QFont("Arial", 14, QFont.Bold))
+        title.setFont(QFont("Arial", max(10, self._sz(14)), QFont.Bold))
         title.setStyleSheet("background-color: transparent; color: white")
         title.setAlignment(Qt.AlignCenter)
         headerlayout.addWidget(title)
- 
+
         instructions = QLabel("Select the applications you need to access to. \n" "An administrator will review and approve your request. Reach out to Jack Nolen for escalation.")
         instructions.setWordWrap(True)
         instructions.setStyleSheet("background-color: transparent; color: white")
         instructions.setAlignment(Qt.AlignCenter)
         headerlayout.addWidget(instructions)
- 
+
         layout.addWidget(header)
-        
-        layout.addSpacing(20)
+
+        layout.addSpacing(self._sz(20))
         
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -51,7 +61,7 @@ class AccessRequestDialog(QDialog):
             haspending = self.permissions.haspendingrequest(self.userid, appinfo['name'])
             
             checkbox = QCheckBox(f"{appinfo['name']}")
-            checkbox.setFont(QFont("Arial", 11))
+            checkbox.setFont(QFont("Arial", max(8, self._sz(11))))
             
             desclabel = QLabel(f"    {appinfo['description']}")
             desclabel.setWordWrap(True)

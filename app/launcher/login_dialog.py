@@ -1,19 +1,29 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox, QTabWidget, QWidget
+from PyQt5.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox, QTabWidget, QWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
- 
+
 from app.auth.local_auth import LocalAuth
 from app.utils.config import PASSWORDMINLENGTH
- 
+
 class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.auth = LocalAuth()
         self.userdata = None
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            scale = min(avail.width() / 1920.0, avail.height() / 1200.0)
+            self._ui_scale = max(0.55, min(1.25, scale))
+        else:
+            self._ui_scale = 1.0
         self.setWindowTitle("Material Planning and Logistics Hub - Login")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(max(300, int(400 * self._ui_scale)))
         self.setModal(True)
         self.setupui()
+
+    def _sz(self, n):
+        return max(1, int(n * self._ui_scale))
  
     def setupui(self):
         layout = QVBoxLayout()
@@ -23,7 +33,7 @@ class LoginDialog(QDialog):
         headerlayout.setContentsMargins(0, 4, 0, 4)
  
         title = QLabel("VCCH MP&L Hub")
-        title.setFont(QFont("Arial", 16, QFont.Bold))
+        title.setFont(QFont("Arial", max(11, self._sz(16)), QFont.Bold))
         title.setStyleSheet("color: white; background-color: transparent;")
         title.setAlignment(Qt.AlignCenter)
         headerlayout.addWidget(title)
@@ -40,33 +50,33 @@ class LoginDialog(QDialog):
         existingusername = userdata.get('username', '')
  
         label = QLabel(f"Welcome back, {existingusername}!")
-        label.setFont(QFont("Arial", 12))
+        label.setFont(QFont("Arial", max(9, self._sz(12))))
         label.setAlignment(Qt.AlignCenter)
         label.setStyleSheet("color: white; background-color: transparent;")
         headerlayout.addWidget(label)
- 
-        layout.addSpacing(10)
- 
+
+        layout.addSpacing(self._sz(10))
+
         usernamelayout = QHBoxLayout()
         usernamelabel = QLabel("Username:")
-        usernamelabel.setFont(QFont("Arial", 10, QFont.Bold))
+        usernamelabel.setFont(QFont("Arial", max(8, self._sz(10)), QFont.Bold))
         usernamelayout.addWidget(usernamelabel)
         self.usernameinput = QLineEdit(existingusername)
         self.usernameinput.setReadOnly(True)
         usernamelayout.addWidget(self.usernameinput)
         layout.addLayout(usernamelayout)
- 
+
         passwordlayout = QHBoxLayout()
         passwordlabel = QLabel("Password:")
-        passwordlabel.setFont(QFont("Arial", 10, QFont.Bold))
+        passwordlabel.setFont(QFont("Arial", max(8, self._sz(10)), QFont.Bold))
         passwordlayout.addWidget(passwordlabel)
         self.passwordinput = QLineEdit()
         self.passwordinput.setEchoMode(QLineEdit.Password)
         self.passwordinput.returnPressed.connect(self.handlelogin)
         passwordlayout.addWidget(self.passwordinput)
         layout.addLayout(passwordlayout)
- 
-        layout.addSpacing(10)
+
+        layout.addSpacing(self._sz(10))
         buttonlayout = QHBoxLayout()
  
         loginbtn = QPushButton("Login")
@@ -84,43 +94,43 @@ class LoginDialog(QDialog):
  
     def setupregistrationform(self, layout, headerlayout=None):
         label = QLabel("Create Your Account")
-        label.setFont(QFont("Arial", 12))
+        label.setFont(QFont("Arial", max(9, self._sz(12))))
         label.setAlignment(Qt.AlignCenter)
         label.setStyleSheet("color: white; background-color: transparent;")
         headerlayout.addWidget(label)
- 
-        layout.addSpacing(10)
- 
+
+        layout.addSpacing(self._sz(10))
+
         usernamelayout = QHBoxLayout()
         usernamelabel = QLabel("Username:")
-        usernamelabel.setFont(QFont("Arial", 10, QFont.Bold))
+        usernamelabel.setFont(QFont("Arial", max(8, self._sz(10)), QFont.Bold))
         usernamelayout.addWidget(usernamelabel)
         self.usernameinput = QLineEdit()
         self.usernameinput.setPlaceholderText("Enter username")
         usernamelayout.addWidget(self.usernameinput)
         layout.addLayout(usernamelayout)
- 
+
         passwordlayout = QHBoxLayout()
         passwordlabel = QLabel("Password:")
-        passwordlabel.setFont(QFont("Arial", 10, QFont.Bold))
+        passwordlabel.setFont(QFont("Arial", max(8, self._sz(10)), QFont.Bold))
         passwordlayout.addWidget(passwordlabel)
         self.passwordinput = QLineEdit()
         self.passwordinput.setEchoMode(QLineEdit.Password)
         self.passwordinput.setPlaceholderText(f"Minimum {PASSWORDMINLENGTH} characters")
         passwordlayout.addWidget(self.passwordinput)
         layout.addLayout(passwordlayout)
- 
+
         confirmpasswordlayout = QHBoxLayout()
         confirmpasswordlabel = QLabel("Confirm:")
-        confirmpasswordlabel.setFont(QFont("Arial", 10, QFont.Bold))
+        confirmpasswordlabel.setFont(QFont("Arial", max(8, self._sz(10)), QFont.Bold))
         confirmpasswordlayout.addWidget(confirmpasswordlabel)
         self.confirminput = QLineEdit()
         self.confirminput.setEchoMode(QLineEdit.Password)
         self.confirminput.setPlaceholderText("Re-enter password")
         confirmpasswordlayout.addWidget(self.confirminput)
         layout.addLayout(confirmpasswordlayout)
- 
-        layout.addSpacing(10)
+
+        layout.addSpacing(self._sz(10))
  
         registerbtn = QPushButton("Create Account")
         registerbtn.clicked.connect(self.handleregister)

@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QMessageBox, QHeaderView
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QMessageBox, QHeaderView
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 
@@ -11,9 +11,20 @@ class AdminWindow(QMainWindow):
         self.adminusername = adminusername
         self.permissions = PermissionsManager()
         self.setWindowTitle("Admin Panel - Access Requests")
-        self.resize(800, 600)
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            scale = min(avail.width() / 1920.0, avail.height() / 1200.0)
+            self._ui_scale = max(0.55, min(1.25, scale))
+            self.resize(max(600, int(800 * self._ui_scale)), max(450, int(600 * self._ui_scale)))
+        else:
+            self._ui_scale = 1.0
+            self.resize(800, 600)
         self.setupui()
         self.loadrequests()
+
+    def _sz(self, n):
+        return max(1, int(n * self._ui_scale))
         
     def setupui(self):
         centralwidget = QWidget()
@@ -26,7 +37,7 @@ class AdminWindow(QMainWindow):
         
         
         title = QLabel("Pending Access Requests")
-        title.setFont(QFont("Arial", 16, QFont.Bold))
+        title.setFont(QFont("Arial", max(11, self._sz(16)), QFont.Bold))
         title.setStyleSheet("color: white; background-color: transparent;")
         headerlayout.addWidget(title)
         
