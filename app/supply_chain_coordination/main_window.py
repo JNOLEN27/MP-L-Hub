@@ -163,12 +163,18 @@ class SupplyChainCoordinationWindow(QMainWindow):
         return APPWINDOWSIZE
 
     def _recalc_filter_heights(self, screen):
-        # AA_EnableHighDpiScaling is set globally before QApplication is
-        # created, so all pixel values here are device-independent logical
-        # pixels and Qt automatically scales them to physical pixels.
-        # Applying devicePixelRatio manually would double-scale every element.
-        self._filter_section_h = 190
-        self._dropdown_h = 170
+        # Scale relative to the 1920×1200 @ 100% reference layout that defines
+        # the intended proportions.  On a smaller or higher-DPI screen the
+        # filter section stays the same fraction of the window as on the
+        # reference display — not the same absolute pixel count.
+        if screen:
+            avail = screen.availableGeometry()
+            scale = min(avail.width() / 1920.0, avail.height() / 1200.0)
+            scale = max(0.55, min(1.25, scale))
+        else:
+            scale = 1.0
+        self._filter_section_h = int(190 * scale)
+        self._dropdown_h = max(55, self._filter_section_h - 20)
 
     def showEvent(self, event):
         super().showEvent(event)
