@@ -2656,6 +2656,17 @@ class SupplyChainCoordinationWindow(QMainWindow):
             remaining = [c for c in displaydf.columns if c not in ordered]
             displaydf = displaydf[ordered + remaining]
 
+            # Final dedup: if the same part number still appears more than once
+            # (e.g. a PIWD row and a shortage-alert row for the same day slipped
+            # through the earlier dedup), keep whichever row has the lowest day number.
+            if 'Part' in displaydf.columns and 'Alerts' in displaydf.columns:
+                displaydf['_day_sort'] = displaydf['Alerts'].str.extract(r'Day (\d+)', expand=False).astype(float)
+                displaydf = (displaydf
+                             .sort_values('_day_sort', na_position='last')
+                             .drop_duplicates(subset=['Part'], keep='first')
+                             .drop(columns=['_day_sort'])
+                             .reset_index(drop=True))
+
             self.originalalertsdf = displaydf.copy()
             self.populatealertfilters(displaydf)
             self.displayalertstable(displaydf)
