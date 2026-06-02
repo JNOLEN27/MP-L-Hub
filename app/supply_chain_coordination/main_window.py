@@ -136,10 +136,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
         else:
             scale = 1.0
         self._ui_scale = scale
-        # Ensure filter section is tall enough for 2 rows of scaled search filters.
+        # Dropdown height independent of filter section — just fits the list widget.
+        self._dropdown_h = max(55, int(120 * scale))
+        # Coverage Dashboard filter needs room for 2 rows of scaled search filters.
         search_row_h = max(45, int(85 * scale))
-        self._filter_section_h = max(int(190 * scale), 2 * search_row_h + 15)
-        self._dropdown_h = max(55, self._filter_section_h - 20)
+        self._filter_section_h = max(self._dropdown_h + 20, 2 * search_row_h + 15)
+        # Alerts/PIWD filter sections only contain dropdowns — use tighter height.
+        self._alert_filter_h = self._dropdown_h + 20
 
     def _sz(self, n):
         return max(1, int(n * self._ui_scale))
@@ -238,7 +241,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         if hasattr(self, 'filtersection'):
             self.filtersection.setMaximumHeight(self._filter_section_h)
         if hasattr(self, 'alertfiltersection'):
-            self.alertfiltersection.setMaximumHeight(self._filter_section_h)
+            self.alertfiltersection.setMaximumHeight(self._alert_filter_h)
+        if hasattr(self, 'piwdfiltersection'):
+            self.piwdfiltersection.setMaximumHeight(self._alert_filter_h)
         for dd in self._dropdowns:
             dd.setFixedHeight(self._dropdown_h)
         self._apply_tab_stylesheet()
@@ -344,7 +349,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createalertfiltersection(self):
         widget = QWidget()
-        widget.setMaximumHeight(self._filter_section_h)
+        widget.setMaximumHeight(self._alert_filter_h)
  
         layout = QHBoxLayout()
  
@@ -1214,7 +1219,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createpiwdfiltersection(self):
         widget = QWidget()
-        widget.setMaximumHeight(self._filter_section_h)
+        widget.setMaximumHeight(self._alert_filter_h)
 
         layout = QHBoxLayout()
 
