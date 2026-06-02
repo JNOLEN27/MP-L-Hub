@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
     QLineEdit, QTextEdit, QTableWidget, QTableWidgetItem, QTabWidget,
     QScrollArea, QDoubleSpinBox, QComboBox, QDateEdit, QHeaderView,
-    QMessageBox, QSplitter, QFrame, QSizePolicy, QAbstractItemView,
+    QMessageBox, QSplitter, QFrame, QSizePolicy, QAbstractItemView, QApplication,
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor
@@ -10,6 +10,19 @@ from PyQt5.QtGui import QFont, QColor
 from app.supply_chain_coordination.adjustment_store import (
     AdjustmentStore, COLUMN_MAPPING_DEFAULTS, COLUMN_MAPPING_META,
 )
+
+
+def _ui_scale_factor():
+    screen = QApplication.primaryScreen()
+    if screen:
+        avail = screen.availableGeometry()
+        scale = min(avail.width() / 1920.0, avail.height() / 1080.0)
+        return max(0.60, min(1.0, scale))
+    return 1.0
+
+def _sz(n, scale):
+    return max(1, int(n * scale))
+
 
 _HDR_STYLE = (
     "QLabel { background-color: #d0e8f8; color: #1a3a6b; font-weight: bold;"
@@ -54,7 +67,8 @@ def _noneditable_item(text: str) -> QTableWidgetItem:
 class ColumnMappingTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._line_edits = {}   
+        self._line_edits = {}
+        self._scale = _ui_scale_factor()
         self._build_ui()
         self._load_saved()
 
@@ -103,7 +117,7 @@ class ColumnMappingTab(QWidget):
 
         for col, txt in enumerate(["Group / Field", "Current Column Name", "Default"]):
             lbl = QLabel(txt)
-            lbl.setFont(QFont("Arial", 9, QFont.Bold))
+            lbl.setFont(QFont("Arial", max(7, _sz(9, self._scale)), QFont.Bold))
             lbl.setStyleSheet("color: #555;")
             grid.addWidget(lbl, 0, col)
 
@@ -114,7 +128,7 @@ class ColumnMappingTab(QWidget):
                 current_group = group
                 sep = QLabel(group)
                 sep.setStyleSheet(_HDR_STYLE)
-                sep.setFont(QFont("Arial", 9, QFont.Bold))
+                sep.setFont(QFont("Arial", max(7, _sz(9, self._scale)), QFont.Bold))
                 grid.addWidget(sep, row, 0, 1, 3)
                 row += 1
 
@@ -123,13 +137,13 @@ class ColumnMappingTab(QWidget):
             grid.addWidget(field_lbl, row, 0)
 
             le = QLineEdit(COLUMN_MAPPING_DEFAULTS[key])
-            le.setFixedHeight(26)
-            le.setStyleSheet("font-family: monospace; font-size: 11px;")
+            le.setFixedHeight(max(18, _sz(26, self._scale)))
+            le.setStyleSheet(f"font-family: monospace; font-size: {max(8, _sz(11, self._scale))}px;")
             self._line_edits[key] = le
             grid.addWidget(le, row, 1)
 
             default_lbl = QLabel(COLUMN_MAPPING_DEFAULTS[key])
-            default_lbl.setStyleSheet("color: #888; font-size: 10px; font-family: monospace;")
+            default_lbl.setStyleSheet(f"color: #888; font-size: {max(7, _sz(10, self._scale))}px; font-family: monospace;")
             grid.addWidget(default_lbl, row, 2)
 
             row += 1
@@ -173,6 +187,7 @@ class InventoryAdjustmentsTab(QWidget):
         super().__init__(parent)
         self._im = import_manager
         self._username = userdata.get('username', 'unknown')
+        self._scale = _ui_scale_factor()
         self._build_ui()
         self._refresh_history()
 
@@ -196,7 +211,7 @@ class InventoryAdjustmentsTab(QWidget):
         splitter = QSplitter(Qt.Vertical)
 
         form_widget = QWidget()
-        form_widget.setMaximumHeight(200)
+        form_widget.setMaximumHeight(max(140, _sz(200, self._scale)))
         form_layout = QVBoxLayout(form_widget)
         form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.setSpacing(6)
@@ -209,7 +224,7 @@ class InventoryAdjustmentsTab(QWidget):
         row1.addWidget(QLabel("Part Number:"))
         self._part_input = QLineEdit()
         self._part_input.setPlaceholderText("e.g. ABC12345")
-        self._part_input.setFixedWidth(160)
+        self._part_input.setFixedWidth(max(110, _sz(160, self._scale)))
         row1.addWidget(self._part_input)
 
         lookup_btn = QPushButton("Lookup Current Inventory")
@@ -228,7 +243,7 @@ class InventoryAdjustmentsTab(QWidget):
         self._new_value_spin = QDoubleSpinBox()
         self._new_value_spin.setRange(0, 9_999_999)
         self._new_value_spin.setDecimals(0)
-        self._new_value_spin.setFixedWidth(120)
+        self._new_value_spin.setFixedWidth(max(80, _sz(120, self._scale)))
         row2.addWidget(self._new_value_spin)
 
         row2.addWidget(QLabel("Reason:"))
@@ -366,7 +381,8 @@ class DeliveryAdjustmentsTab(QWidget):
         super().__init__(parent)
         self._im = import_manager
         self._username = userdata.get('username', 'unknown')
-        self._search_results = []  
+        self._search_results = []
+        self._scale = _ui_scale_factor()
         self._build_ui()
         self._refresh_history()
 
@@ -402,13 +418,13 @@ class DeliveryAdjustmentsTab(QWidget):
         search_row.addWidget(QLabel("Part No:"))
         self._edit_part = QLineEdit()
         self._edit_part.setPlaceholderText("e.g. ABC12345")
-        self._edit_part.setFixedWidth(140)
+        self._edit_part.setFixedWidth(max(90, _sz(140, self._scale)))
         search_row.addWidget(self._edit_part)
 
         search_row.addWidget(QLabel("Source:"))
         self._edit_source = QComboBox()
         self._edit_source.addItems(["Splunk Receiving", "Goods to be Received"])
-        self._edit_source.setFixedWidth(160)
+        self._edit_source.setFixedWidth(max(110, _sz(160, self._scale)))
         search_row.addWidget(self._edit_source)
 
         search_btn = QPushButton("Search")
@@ -419,7 +435,7 @@ class DeliveryAdjustmentsTab(QWidget):
         edit_layout.addLayout(search_row)
 
         self._search_table = _make_table(["Part No", "Date", "Qty", "Source detail"])
-        self._search_table.setFixedHeight(150)
+        self._search_table.setFixedHeight(max(90, _sz(150, self._scale)))
         self._search_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._search_table.itemSelectionChanged.connect(self._on_search_selection)
         edit_layout.addWidget(self._search_table)
@@ -429,7 +445,7 @@ class DeliveryAdjustmentsTab(QWidget):
         self._edit_qty = QDoubleSpinBox()
         self._edit_qty.setRange(0, 9_999_999)
         self._edit_qty.setDecimals(0)
-        self._edit_qty.setFixedWidth(110)
+        self._edit_qty.setFixedWidth(max(75, _sz(110, self._scale)))
         save_row.addWidget(self._edit_qty)
 
         save_row.addWidget(QLabel("Reason:"))
@@ -463,6 +479,7 @@ class DeliveryAdjustmentsTab(QWidget):
         form_grid.addWidget(QLabel("Part No:"), 0, 0)
         self._add_part = QLineEdit()
         self._add_part.setPlaceholderText("e.g. ABC12345")
+        self._add_part.setMinimumWidth(max(90, _sz(140, self._scale)))
         form_grid.addWidget(self._add_part, 0, 1)
 
         form_grid.addWidget(QLabel("Delivery Date:"), 1, 0)

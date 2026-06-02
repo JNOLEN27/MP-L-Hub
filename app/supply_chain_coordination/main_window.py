@@ -1049,7 +1049,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QVBoxLayout()
  
         title = QLabel("Call-off Forecast and Waterfall")
-        title.setFont(QFont("Arial", 16, QFont.Bold))
+        title.setFont(QFont("Arial", max(10, self._sz(16)), QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
  
@@ -1067,7 +1067,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QVBoxLayout()
 
         title = QLabel("Individual Part Coverage")
-        title.setFont(QFont("Arial", 16, QFont.Bold))
+        title.setFont(QFont("Arial", max(10, self._sz(16)), QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
@@ -1093,14 +1093,16 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QVBoxLayout()
  
         title = QLabel("LDJIS Coverage")
-        title.setFont(QFont("Arial", 16, QFont.Bold))
+        title.setFont(QFont("Arial", max(10, self._sz(16)), QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
- 
+
+        _bpv = max(4, self._sz(10))
+        _bph = max(8, self._sz(20))
         btnlayout = QHBoxLayout()
         generatebtn = QPushButton("Generate LDJIS Coverage")
         generatebtn.clicked.connect(self.generateldjiscoverage)
-        generatebtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
+        generatebtn.setStyleSheet(f"QPushButton {{background-color: #156082; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #45a049;}}")
         btnlayout.addWidget(generatebtn)
         btnlayout.addStretch()
         layout.addLayout(btnlayout)
@@ -1124,14 +1126,16 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QVBoxLayout()
  
         title = QLabel("Alerts Breakdown")
-        title.setFont(QFont("Arial", 16, QFont.Bold))
+        title.setFont(QFont("Arial", max(10, self._sz(16)), QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
- 
+
+        _bpv = max(4, self._sz(10))
+        _bph = max(8, self._sz(20))
         btnlayout = QHBoxLayout()
         generatebtn = QPushButton("Generate Alerts Breakdown")
         generatebtn.clicked.connect(self.generatealertsbreakdown)
-        generatebtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
+        generatebtn.setStyleSheet(f"QPushButton {{background-color: #156082; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #45a049;}}")
         btnlayout.addWidget(generatebtn)
  
         exportbtn = QPushButton("Export to XLSX")
@@ -1172,14 +1176,16 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QVBoxLayout()
         
         title = QLabel("PIWD Report")
-        title.setFont(QFont("Arial", 15, QFont.Bold))
+        title.setFont(QFont("Arial", max(10, self._sz(15)), QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
-        
+
+        _bpv = max(4, self._sz(10))
+        _bph = max(8, self._sz(20))
         btnlayout = QHBoxLayout()
         generatebtn = QPushButton("Generate PIWD Report")
         generatebtn.clicked.connect(self.generatepiwdreport)
-        generatebtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
+        generatebtn.setStyleSheet(f"QPushButton {{background-color: #156082; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #45a049;}}")
         btnlayout.addWidget(generatebtn)
         
         exportbtn = QPushButton("Export to XLSX")
@@ -1208,7 +1214,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createpiwdfiltersection(self):
         widget = QWidget()
-        widget.setMaximumHeight(190)
+        widget.setMaximumHeight(self._filter_section_h)
 
         layout = QHBoxLayout()
 
@@ -1237,29 +1243,32 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
     def createcalloffsearchsection(self):
         widget = QWidget()
-        widget.setMaximumHeight(100)
- 
+        widget.setMaximumHeight(max(40, self._sz(65)))
+        _sf = max(8, self._sz(12))
+        _bpv = max(4, self._sz(8))
+        _bph = max(8, self._sz(16))
+
         layout = QHBoxLayout()
- 
+
         searchlabel = QLabel("Part Number:")
-        searchlabel.setFont(QFont("Arial", 12, QFont.Bold))
+        searchlabel.setFont(QFont("Arial", _sf, QFont.Bold))
         layout.addWidget(searchlabel)
- 
+
         self.calloffpartsearch = QLineEdit()
         self.calloffpartsearch.setPlaceholderText("Enter part number for call-off analysis...")
-        self.calloffpartsearch.setMaximumWidth(250)
-        self.calloffpartsearch.setStyleSheet("""QLineEdit {border: 2px solid #ccc; border-radius: 5px; padding: 8px; font-size: 12px;} QLineEdit:focus {border-color: #4CAF50;}""")
+        self.calloffpartsearch.setMaximumWidth(self._sz(250))
+        self.calloffpartsearch.setStyleSheet(f"QLineEdit {{border: 2px solid #ccc; border-radius: 5px; padding: {_bpv}px; font-size: {_sf}px;}} QLineEdit:focus {{border-color: #4CAF50;}}")
         self.calloffpartsearch.returnPressed.connect(self.searchcalloffdata)
         layout.addWidget(self.calloffpartsearch)
- 
+
         searchbtn = QPushButton("Generate Waterfall")
         searchbtn.clicked.connect(self.searchcalloffdata)
-        searchbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 8px 16px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #1976D2;}""")
+        searchbtn.setStyleSheet(f"QPushButton {{background-color: #156082; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #1976D2;}}")
         layout.addWidget(searchbtn)
- 
+
         clearbtn = QPushButton("Clear")
         clearbtn.clicked.connect(self.clearcalloffanalysis)
-        clearbtn.setStyleSheet("""QPushButton {background-color: #E97132; color: white; padding: 8px 16px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #da190b;}""")
+        clearbtn.setStyleSheet(f"QPushButton {{background-color: #E97132; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #da190b;}}")
         layout.addWidget(clearbtn)
  
         layout.addStretch()
@@ -1273,10 +1282,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         dailytitlerow = QHBoxLayout()
         dailytitle = QLabel("Daily View - Call-off Forecast Waterfall")
-        dailytitle.setFont(QFont("Arial", 14, QFont.Bold))
+        dailytitle.setFont(QFont("Arial", max(9, self._sz(14)), QFont.Bold))
         dailytitlerow.addWidget(dailytitle)
         dailydeltatitle = QLabel("Daily Delta")
-        dailydeltatitle.setFont(QFont("Arial", 14, QFont.Bold))
+        dailydeltatitle.setFont(QFont("Arial", max(9, self._sz(14)), QFont.Bold))
         dailytitlerow.addWidget(dailydeltatitle)
         layout.addLayout(dailytitlerow)
  
@@ -1302,10 +1311,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         weeklytitlerow = QHBoxLayout()
         weeklytitle = QLabel("Weekly Summary - Call-off Forecast Waterfall")
-        weeklytitle.setFont(QFont("Arial", 14, QFont.Bold))
+        weeklytitle.setFont(QFont("Arial", max(9, self._sz(14)), QFont.Bold))
         weeklytitlerow.addWidget(weeklytitle)
         weeklydeltatitle = QLabel("Weekly Delta")
-        weeklydeltatitle.setFont(QFont("Arial", 14, QFont.Bold))
+        weeklydeltatitle.setFont(QFont("Arial", max(9, self._sz(14)), QFont.Bold))
         weeklytitlerow.addWidget(weeklydeltatitle)
         layout.addLayout(weeklytitlerow)
  
@@ -1334,33 +1343,36 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createpartsearchsection(self):
         widget = QWidget()
-        widget.setMaximumHeight(150)
+        widget.setMaximumHeight(max(40, self._sz(65)))
+        _sf = max(8, self._sz(12))
+        _bpv = max(4, self._sz(8))
+        _bph = max(8, self._sz(16))
         layout = QHBoxLayout()
- 
+
         searchlabel = QLabel("Part Number:")
-        searchlabel.setFont(QFont("Arial", 12, QFont.Bold))
+        searchlabel.setFont(QFont("Arial", _sf, QFont.Bold))
         layout.addWidget(searchlabel)
- 
+
         self.partnumbersearch = QLineEdit()
         self.partnumbersearch.setPlaceholderText("Enter part number...")
-        self.partnumbersearch.setMaximumWidth(200)
-        self.partnumbersearch.setStyleSheet("""QLineEdit {border: 2px solid #ccc; border-radius: 5px; padding: 8px; font-size: 12px;} QLineEdit:focus {border-color: #4CAF50;}""")
+        self.partnumbersearch.setMaximumWidth(self._sz(200))
+        self.partnumbersearch.setStyleSheet(f"QLineEdit {{border: 2px solid #ccc; border-radius: 5px; padding: {_bpv}px; font-size: {_sf}px;}} QLineEdit:focus {{border-color: #4CAF50;}}")
         self.partnumbersearch.returnPressed.connect(self.searchpartcoverage)
         layout.addWidget(self.partnumbersearch)
- 
+
         searchbtn = QPushButton("Search")
         searchbtn.clicked.connect(self.searchpartcoverage)
-        searchbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; padding: 8px 16px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #45a049;}""")
+        searchbtn.setStyleSheet(f"QPushButton {{background-color: #156082; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #45a049;}}")
         layout.addWidget(searchbtn)
- 
+
         clearbtn = QPushButton("Clear")
         clearbtn.clicked.connect(self.clearpartsearch)
-        clearbtn.setStyleSheet("""QPushButton {background-color: #E97132; color: white; padding: 8px 16px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #da190b;}""")
+        clearbtn.setStyleSheet(f"QPushButton {{background-color: #E97132; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #da190b;}}")
         layout.addWidget(clearbtn)
 
         exportbtn = QPushButton("Export Transactions")
         exportbtn.clicked.connect(self.exporttransactiontable)
-        exportbtn.setStyleSheet("""QPushButton {background-color: #1976D2; color: white; padding: 8px 16px; border: none; border-radius: 5px; font-weight: bold;} QPushButton:hover {background-color: #1565C0;}""")
+        exportbtn.setStyleSheet(f"QPushButton {{background-color: #1976D2; color: white; padding: {_bpv}px {_bph}px; border: none; border-radius: 5px; font-weight: bold;}} QPushButton:hover {{background-color: #1565C0;}}")
         layout.addWidget(exportbtn)
  
         layout.addStretch()
@@ -1372,12 +1384,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         layout = QVBoxLayout()
         infotitle = QLabel("Part Information")
-        infotitle.setFont(QFont("Arial", 14, QFont.Bold))
+        infotitle.setFont(QFont("Arial", max(9, self._sz(14)), QFont.Bold))
         layout.addWidget(infotitle)
- 
+
         gridwidget = QWidget()
         gridlayout = QGridLayout(gridwidget)
-        gridlayout.setSpacing(10)
+        gridlayout.setSpacing(self._sz(10))
  
         self.partinfolabels = {}
         infofields = [
@@ -1388,11 +1400,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
         for fieldname, row, col in infofields:
             label = QLabel(f"{fieldname}:")
-            label.setFont(QFont("Arial", 10, QFont.Bold))
+            label.setFont(QFont("Arial", max(7, self._sz(10)), QFont.Bold))
             gridlayout.addWidget(label, row * 2, col)
  
             valuelabel = QLabel("--")
-            valuelabel.setStyleSheet("color: #333; font-size: 11px; padding: 2px;")
+            valuelabel.setStyleSheet(f"color: #333; font-size: {max(7, self._sz(11))}px; padding: {self._sz(2)}px;")
             gridlayout.addWidget(valuelabel, row * 2 + 1, col)
  
             self.partinfolabels[fieldname] = valuelabel
@@ -1406,7 +1418,7 @@ class SupplyChainCoordinationWindow(QMainWindow):
         layout = QVBoxLayout()
  
         transtitle = QLabel("Transaction Projections")
-        transtitle.setFont(QFont("Arial", 14, QFont.Bold))
+        transtitle.setFont(QFont("Arial", max(9, self._sz(14)), QFont.Bold))
         layout.addWidget(transtitle)
  
         scrollarea = QScrollArea()
@@ -1419,11 +1431,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self.transactiontable.setColumnCount(len(columnheaders))
         self.transactiontable.setHorizontalHeaderLabels(columnheaders)
  
-        self.transactiontable.setColumnWidth(0, 100)
-        self.transactiontable.setColumnWidth(1, 120)
-        self.transactiontable.setColumnWidth(2, 110)
-        self.transactiontable.setColumnWidth(3, 110)
-        self.transactiontable.setColumnWidth(4, 100)
+        self.transactiontable.setColumnWidth(0, self._sz(100))
+        self.transactiontable.setColumnWidth(1, self._sz(120))
+        self.transactiontable.setColumnWidth(2, self._sz(110))
+        self.transactiontable.setColumnWidth(3, self._sz(110))
+        self.transactiontable.setColumnWidth(4, self._sz(100))
  
         scrollarea.setWidget(self.transactiontable)
         layout.addWidget(scrollarea)
@@ -1707,12 +1719,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
     def _createpartnotessection(self):
         widget = QWidget()
-        widget.setMaximumHeight(200)
+        widget.setMaximumHeight(self._sz(200))
         layout = QVBoxLayout()
         layout.setContentsMargins(4, 0, 0, 0)
 
         notetitle = QLabel("Part Notes")
-        notetitle.setFont(QFont("Arial", 14, QFont.Bold))
+        notetitle.setFont(QFont("Arial", max(9, self._sz(14)), QFont.Bold))
         layout.addWidget(notetitle)
 
         self.partnotestextbox = QTextEdit()
