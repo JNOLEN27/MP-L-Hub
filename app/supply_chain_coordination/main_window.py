@@ -2577,6 +2577,10 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 alertdf = pd.concat([normal_df, piwed_candidates], ignore_index=True)
 
                 if 'PART' in alertdf.columns and not alertdf.empty:
+                    # Normalise to clean string so float 12345.0 and str "12345"
+                    # are treated as the same part by drop_duplicates.
+                    alertdf['PART'] = (alertdf['PART'].astype(str).str.strip()
+                                       .str.replace(r'\.0$', '', regex=True))
                     alertdf = alertdf.drop_duplicates(subset=['PART', 'ALERT_DETAILS'], keep='first')
                     alertdf['_day_num'] = alertdf['ALERT_DETAILS'].str.extract(r'Day (\d+)', expand=False).astype(float)
                     alertdf = alertdf.sort_values('_day_num').drop_duplicates(subset=['PART'], keep='first').drop(columns=['_day_num'])
@@ -2656,10 +2660,12 @@ class SupplyChainCoordinationWindow(QMainWindow):
             remaining = [c for c in displaydf.columns if c not in ordered]
             displaydf = displaydf[ordered + remaining]
 
-            # Final dedup: if the same part number still appears more than once
-            # (e.g. a PIWD row and a shortage-alert row for the same day slipped
-            # through the earlier dedup), keep whichever row has the lowest day number.
+            # Final dedup: normalise Part to clean string first so that float
+            # 12345.0 and str "12345" are treated as the same value, then drop
+            # any remaining duplicate part rows keeping the lowest alert day.
             if 'Part' in displaydf.columns and 'Alerts' in displaydf.columns:
+                displaydf['Part'] = (displaydf['Part'].astype(str).str.strip()
+                                     .str.replace(r'\.0$', '', regex=True))
                 displaydf['_day_sort'] = displaydf['Alerts'].str.extract(r'Day (\d+)', expand=False).astype(float)
                 displaydf = (displaydf
                              .sort_values('_day_sort', na_position='last')
