@@ -136,7 +136,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
         else:
             scale = 1.0
         self._ui_scale = scale
-        self._filter_section_h = int(190 * scale)
+        # Ensure filter section is tall enough for 2 rows of scaled search filters.
+        search_row_h = max(45, int(85 * scale))
+        self._filter_section_h = max(int(190 * scale), 2 * search_row_h + 15)
         self._dropdown_h = max(55, self._filter_section_h - 20)
 
     def _sz(self, n):
@@ -299,11 +301,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
         partlistheader = QHBoxLayout()
         partlistlabel = QLabel("Multiple Part Search:")
-        partlistlabel.setFont(QFont("Arial", 10, QFont.Bold))
+        partlistlabel.setFont(QFont("Arial", max(7, self._sz(10)), QFont.Bold))
         partlistheader.addWidget(partlistlabel)
         partlistheader.addStretch()
         clearpartlistbtn = QPushButton("✕")
-        clearpartlistbtn.setFixedSize(20, 20)
+        clearpartlistbtn.setFixedSize(max(15, self._sz(20)), max(15, self._sz(20)))
         clearpartlistbtn.setToolTip("Clear part list filter")
         clearpartlistbtn.clicked.connect(self._clearpartlistfilter)
         partlistheader.addWidget(clearpartlistbtn)
@@ -313,13 +315,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
         self._partlist_textedit.setPlaceholderText(
             "Paste part numbers here\n(one per line or comma-separated)"
         )
-        self._partlist_textedit.setFixedHeight(115)
-        self._partlist_textedit.setFixedWidth(175)
-        self._partlist_textedit.setStyleSheet("font-size: 10px; font-family: monospace;")
+        self._partlist_textedit.setFixedHeight(max(60, self._sz(115)))
+        self._partlist_textedit.setFixedWidth(max(120, self._sz(175)))
+        self._partlist_textedit.setStyleSheet(f"font-size: {max(7, self._sz(10))}px; font-family: monospace;")
         partlistlayout.addWidget(self._partlist_textedit)
 
         self._partlist_statuslabel = QLabel("")
-        self._partlist_statuslabel.setStyleSheet("font-size: 9px; color: #555;")
+        self._partlist_statuslabel.setStyleSheet(f"font-size: {max(7, self._sz(9))}px; color: #555;")
         partlistlayout.addWidget(self._partlist_statuslabel)
 
         layout.addWidget(partlistwidget)
@@ -387,6 +389,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createmultiselectdropdown(self, placeholdertext, filtertype="SCC"):
         dropdown_h = self._dropdown_h
+        label_font_pt = max(7, self._sz(10))
+        list_font_px = max(8, self._sz(11))
+        select_font_pt = max(7, self._sz(9))
         class SimpleMultiSelectFilter(QWidget):
             selectionChanged = pyqtSignal()
 
@@ -394,41 +399,41 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 super().__init__()
                 self.filtertype = filtertype
                 self.setFixedHeight(dropdown_h)
- 
+
                 layout = QVBoxLayout()
                 layout.setContentsMargins(5, 5, 5, 5)
- 
+
                 self.label = QLabel(f"{filtertype} Filter:")
-                self.label.setFont(QFont("Arial", 10, QFont.Bold))
+                self.label.setFont(QFont("Arial", label_font_pt, QFont.Bold))
                 layout.addWidget(self.label)
- 
+
                 self.list_widget = QListWidget()
                 self.list_widget.itemChanged.connect(self.on_item_changed)
-                self.list_widget.setStyleSheet("""
-                    QListWidget {
+                self.list_widget.setStyleSheet(f"""
+                    QListWidget {{
                         border: 1px solid #ccc;
-                        font-size: 11px;
-                    }
-                    QListWidget::item {
+                        font-size: {list_font_px}px;
+                    }}
+                    QListWidget::item {{
                         padding: 2px;
-                    }
+                    }}
                 """)
                 layout.addWidget(self.list_widget)
- 
+
                 self.setLayout(layout)
                 self.selected_items = set()
                 self.all_items = []
- 
+
             def additems(self, items, presorted=False):
                 self.list_widget.clear()
                 self.selected_items.clear()
                 self.all_items.clear()
- 
+
                 select_all_item = QListWidgetItem(f"✓ All {self.filtertype}'s")
                 select_all_item.setFlags(select_all_item.flags() | Qt.ItemIsUserCheckable)
                 select_all_item.setCheckState(Qt.Checked)
                 select_all_item.setData(Qt.UserRole, "SELECT_ALL")
-                select_all_item.setFont(QFont("Arial", 9, QFont.Bold))
+                select_all_item.setFont(QFont("Arial", select_font_pt, QFont.Bold))
                 self.list_widget.addItem(select_all_item)
  
                 maxtextlength = len("✓ All SCC Names")
@@ -536,44 +541,47 @@ class SupplyChainCoordinationWindow(QMainWindow):
         return widget
  
     def createsearchfilter(self, filtertype="MFG", columnname="SUPP_MFG"):
+        sf_font = max(7, self._sz(9))
+        btn_w = max(22, self._sz(30))
+        btn_h = max(18, self._sz(24))
         widget = QWidget()
-        widget.setMinimumHeight(100)
-        widget.setMinimumWidth(150)
- 
+        widget.setMinimumHeight(max(45, self._sz(85)))
+        widget.setMinimumWidth(max(100, self._sz(150)))
+
         layout = QVBoxLayout()
         layout.setContentsMargins(3, 3, 3, 3)
         layout.addSpacing(2)
- 
+
         label = QLabel(f"{filtertype} Search")
-        label.setFont(QFont("Arial", 9, QFont.Bold))
+        label.setFont(QFont("Arial", sf_font, QFont.Bold))
         layout.addWidget(label)
- 
+
         searchinput = QLineEdit()
         searchinput.setPlaceholderText(f"Enter {filtertype}...")
-        searchinput.setStyleSheet("""QLineEdit {border: 2px solid #ccc; border-radius: 3px; padding: 5px; font-size: 9px;} QLineEdit:focus {border-color: #4CAF50;}""")
+        searchinput.setStyleSheet(f"QLineEdit {{border: 2px solid #ccc; border-radius: 3px; padding: 5px; font-size: {sf_font}px;}} QLineEdit:focus {{border-color: #4CAF50;}}")
         layout.addWidget(searchinput)
- 
+
         btnlayout = QHBoxLayout()
         btnlayout.setSpacing(2)
- 
+
         searchbtn = QPushButton("✓")
-        searchbtn.setFixedSize(30, 24)
+        searchbtn.setFixedSize(btn_w, btn_h)
         searchbtn.clicked.connect(self.applyfilters)
         searchbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; border: none; padding: 2px; border-radius: 3px;} QPushButton:hover {background-color: #45a049;}""")
         btnlayout.addWidget(searchbtn)
 
         clearsearchbtn = QPushButton("✖")
-        clearsearchbtn.setFixedSize(30, 24)
+        clearsearchbtn.setFixedSize(btn_w, btn_h)
         clearsearchbtn.clicked.connect(lambda: self.clearsearchfilter(widget))
         clearsearchbtn.setStyleSheet("""QPushButton {background-color: #E97132; color: white; border: none; padding: 2px; border-radius: 3px;} QPushButton:hover {background-color: #da190b;}""")
         btnlayout.addWidget(clearsearchbtn)
- 
+
         btnlayout.addStretch()
- 
+
         layout.addLayout(btnlayout)
- 
+
         statuslabel = QLabel("")
-        statuslabel.setStyleSheet("color: #666; font-size: 9px;")
+        statuslabel.setStyleSheet(f"color: #666; font-size: {sf_font}px;")
         statuslabel.setWordWrap(True)
         layout.addWidget(statuslabel)
  
