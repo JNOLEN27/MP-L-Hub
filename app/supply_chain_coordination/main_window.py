@@ -547,58 +547,54 @@ class SupplyChainCoordinationWindow(QMainWindow):
  
     def createsearchfilter(self, filtertype="MFG", columnname="SUPP_MFG"):
         sf_font = max(7, self._sz(9))
-        btn_w = max(22, self._sz(30))
-        btn_h = max(18, self._sz(24))
+        btn_size = max(16, self._sz(22))
         widget = QWidget()
-        widget.setMinimumHeight(max(45, self._sz(85)))
+        widget.setMinimumHeight(max(40, self._sz(70)))
         widget.setMinimumWidth(max(100, self._sz(150)))
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(3, 3, 3, 3)
-        layout.addSpacing(2)
+        layout.setContentsMargins(3, 2, 3, 2)
 
         label = QLabel(f"{filtertype} Search")
         label.setFont(QFont("Arial", sf_font, QFont.Bold))
         layout.addWidget(label)
 
+        inputrow = QHBoxLayout()
+        inputrow.setSpacing(2)
+
         searchinput = QLineEdit()
         searchinput.setPlaceholderText(f"Enter {filtertype}...")
-        searchinput.setStyleSheet(f"QLineEdit {{border: 2px solid #ccc; border-radius: 3px; padding: 5px; font-size: {sf_font}px;}} QLineEdit:focus {{border-color: #4CAF50;}}")
-        layout.addWidget(searchinput)
-
-        btnlayout = QHBoxLayout()
-        btnlayout.setSpacing(2)
+        searchinput.setStyleSheet(f"QLineEdit {{border: 2px solid #ccc; border-radius: 3px; padding: 3px; font-size: {sf_font}px;}} QLineEdit:focus {{border-color: #4CAF50;}}")
+        inputrow.addWidget(searchinput, 1)
 
         searchbtn = QPushButton("✓")
-        searchbtn.setFixedSize(btn_w, btn_h)
+        searchbtn.setFixedSize(btn_size, btn_size)
         searchbtn.clicked.connect(self.applyfilters)
-        searchbtn.setStyleSheet("""QPushButton {background-color: #156082; color: white; border: none; padding: 2px; border-radius: 3px;} QPushButton:hover {background-color: #45a049;}""")
-        btnlayout.addWidget(searchbtn)
+        searchbtn.setStyleSheet("QPushButton {background-color: #156082; color: white; border: none; padding: 1px; border-radius: 3px;} QPushButton:hover {background-color: #45a049;}")
+        inputrow.addWidget(searchbtn)
 
         clearsearchbtn = QPushButton("✖")
-        clearsearchbtn.setFixedSize(btn_w, btn_h)
+        clearsearchbtn.setFixedSize(btn_size, btn_size)
         clearsearchbtn.clicked.connect(lambda: self.clearsearchfilter(widget))
-        clearsearchbtn.setStyleSheet("""QPushButton {background-color: #E97132; color: white; border: none; padding: 2px; border-radius: 3px;} QPushButton:hover {background-color: #da190b;}""")
-        btnlayout.addWidget(clearsearchbtn)
+        clearsearchbtn.setStyleSheet("QPushButton {background-color: #E97132; color: white; border: none; padding: 1px; border-radius: 3px;} QPushButton:hover {background-color: #da190b;}")
+        inputrow.addWidget(clearsearchbtn)
 
-        btnlayout.addStretch()
-
-        layout.addLayout(btnlayout)
+        layout.addLayout(inputrow)
 
         statuslabel = QLabel("")
         statuslabel.setStyleSheet(f"color: #666; font-size: {sf_font}px;")
         statuslabel.setWordWrap(True)
         layout.addWidget(statuslabel)
- 
+
         layout.addStretch()
- 
+
         searchinput.returnPressed.connect(self.applyfilters)
- 
+
         widget.searchinput = searchinput
         widget.statuslabel = statuslabel
         widget.filtertype = filtertype
         widget.columnname = columnname
- 
+
         widget.setLayout(layout)
         return widget
  
@@ -1040,6 +1036,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
         hh = ct.horizontalHeader().height()
         fv.horizontalHeader().setFixedHeight(hh)
         fv.setGeometry(vhw + fw, fw, frozen_width, ct.viewport().height() + hh)
+        # After resizing the overlay (especially when contracting), Qt does not
+        # automatically repaint the now-exposed area of the main viewport.
+        # Schedule a deferred update so revealed columns render correctly.
+        ct.viewport().update()
+        ct.horizontalHeader().viewport().update()
 
     def eventFilter(self, obj, event):
         if obj is self._frozen_view and event.type() == QEvent.Wheel:
