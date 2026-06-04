@@ -2565,7 +2565,9 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 return
             
             if 'ALERT_TYPE' in alertdf.columns:
-                shortage_df = alertdf[alertdf['ALERT_TYPE'] == 'Shortage alert']
+                # Case-insensitive, whitespace-stripped match so 'Shortage Alert',
+                # 'shortage alert', 'Shortage alert ', etc. all qualify.
+                shortage_df = alertdf[alertdf['ALERT_TYPE'].str.strip().str.lower() == 'shortage alert']
             else:
                 shortage_df = alertdf
 
@@ -2575,11 +2577,15 @@ class SupplyChainCoordinationWindow(QMainWindow):
                 day_mask = shortage_df['ALERT_DETAILS'].str.contains(r'Day [1-4]\b', case=False, na=False)
                 normal_df = shortage_df[day_mask].copy()
                 normal_df['ALERT_DETAILS'] = normal_df['ALERT_DETAILS'].str.extract(r'(Day [1-4])\b', expand=False)
+                # Tag shortage alert rows so they beat PIWD rows when day numbers tie.
+                normal_df['_src'] = 0
 
                 piwed_candidates = pd.DataFrame()
-                piwed_mask = alertdf['ALERT_DETAILS'].str.contains(r'PIWED below zero using GC ETA', case=False, na=False) | \
-                             alertdf['ALERT_DETAILS'].str.contains(r'PIWD below zero', case=False, na=False) | \
-                            alertdf['ALERT_DETAILS'].str.contains(r'PIWDCS below zero', case=False, na=False)
+                piwed_mask = (
+                    alertdf['ALERT_DETAILS'].str.contains(r'PIWED below zero using GC ETA', case=False, na=False) |
+                    alertdf['ALERT_DETAILS'].str.contains(r'PIWD below zero', case=False, na=False) |
+                    alertdf['ALERT_DETAILS'].str.contains(r'PIWDCS below zero', case=False, na=False)
+                )
                 if piwed_mask.any() and 'COMMENTS' in alertdf.columns:
                     piwed_df = alertdf[piwed_mask].copy()
 
@@ -2597,7 +2603,11 @@ class SupplyChainCoordinationWindow(QMainWindow):
 
                     piwed_df['ALERT_DETAILS'] = piwed_df['COMMENTS'].apply(_piwed_day_label)
                     piwed_candidates = piwed_df[piwed_df['ALERT_DETAILS'].notna()].copy()
+                    # PIWD rows are secondary — excluded PIWD (prod date > 4 days) must
+                    # never prevent a valid shortage alert from appearing.
+                    piwed_candidates['_src'] = 1
 
+                # Shortage alert rows go first so same-part/same-day dedup keeps them.
                 alertdf = pd.concat([normal_df, piwed_candidates], ignore_index=True)
 
                 if 'PART' in alertdf.columns and not alertdf.empty:
@@ -2605,9 +2615,13 @@ class SupplyChainCoordinationWindow(QMainWindow):
                     # are treated as the same part by drop_duplicates.
                     alertdf['PART'] = (alertdf['PART'].astype(str).str.strip()
                                        .str.replace(r'\.0$', '', regex=True))
-                    alertdf = alertdf.drop_duplicates(subset=['PART', 'ALERT_DETAILS'], keep='first')
                     alertdf['_day_num'] = alertdf['ALERT_DETAILS'].str.extract(r'Day (\d+)', expand=False).astype(float)
-                    alertdf = alertdf.sort_values('_day_num').drop_duplicates(subset=['PART'], keep='first').drop(columns=['_day_num'])
+                    # Sort by day first, then by source so shortage alerts beat PIWD on
+                    # equal day numbers.  drop_duplicates keeps the first (best) row per part.
+                    alertdf = (alertdf
+                               .sort_values(['_day_num', '_src'], na_position='last')
+                               .drop_duplicates(subset=['PART'], keep='first')
+                               .drop(columns=['_day_num', '_src']))
             else:
                 alertdf = shortage_df
 
